@@ -1,0 +1,12 @@
+CSBI ok = True
+astral R x1        -> 2 cells for '𝓡' (units written=2)
+astral R x6        -> 12 cells for '𝓡𝓡𝓡𝓡𝓡𝓡' (units written=12)
+astral u x6        -> 12 cells for '𝓾𝓾𝓾𝓾𝓾𝓾' (units written=12)
+script 'Rainc2'    -> 11 cells for '𝓡𝓪𝓲𝓷𝓬2' (units written=11)
+BMP star x6        -> 12 cells for '★★★★★★' (units written=6)
+BMP moon x6        -> 6 cells for '☾☾☾☾☾☾' (units written=6)
+box H x6           -> 6 cells for '══════' (units written=6)
+box V x6           -> 6 cells for '║║║║║║' (units written=6)
+CJK x6             -> 12 cells for '漢漢漢漢漢漢' (units written=6)
+ascii x6           -> 6 cells for 'AAAAAA' (units written=6)
+label full         -> 36 cells for '★ 𝓸𝓷𝓵𝓾 𝓯𝓸𝓻 𝓽𝓮𝓼𝓽𝓲𝓷𝓰 ★' (units written=34)

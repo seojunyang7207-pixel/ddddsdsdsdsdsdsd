@@ -1,0 +1,13 @@
+preferred encoding = cp949
+stdout isatty = False
+U+2605 BLACK STAR      ord=0x2605 eaw=A isprintable=True
+U+263E MOON            ord=0x263e eaw=N isprintable=True
+U+207A sup plus        ord=0x207a eaw=N isprintable=True
+U+208A sub plus        ord=0x208a eaw=N isprintable=True
+R math bold script     ord=0x1d4e1 eaw=N isprintable=True
+u math bold script     ord=0x1d4fe eaw=N isprintable=True
+2 ascii                ord=0x32 eaw=Na isprintable=True
+box H                  ord=0x2550 eaw=A isprintable=True
+box V                  ord=0x2551 eaw=A isprintable=True
+stdout handle = 2944
+GetConsoleScreenBufferInfo ok = False

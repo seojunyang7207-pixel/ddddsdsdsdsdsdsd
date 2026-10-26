@@ -1,0 +1,11 @@
+Traceback (most recent call last):
+  File "C:\Users\seoju\OneDrive\Desktop\MH-DDOS\RAIN ver1.2(color)\ddos_art.py", line 1980, in <module>
+    show_main_screen()
+    ~~~~~~~~~~~~~~~~^^
+  File "C:\Users\seoju\OneDrive\Desktop\MH-DDOS\RAIN ver1.2(color)\ddos_art.py", line 1352, in show_main_screen
+    typewrite(ln, delay=0.04)
+    ~~~~~~~~~^^^^^^^^^^^^^^^^
+  File "C:\Users\seoju\OneDrive\Desktop\MH-DDOS\RAIN ver1.2(color)\ddos_art.py", line 603, in typewrite
+    sys.stdout.write(out)
+    ~~~~~~~~~~~~~~~~^^^^^
+UnicodeEncodeError: 'cp949' codec can't encode character '\u2554' in position 308: illegal multibyte sequence

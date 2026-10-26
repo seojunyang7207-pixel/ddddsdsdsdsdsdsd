@@ -1,0 +1,1698 @@
+# -*- coding: utf-8 -*-
+"""
+RAIN Console Art Engine
+==========================
+- Windows / Linux 터미널 색상 자동 활성화 (ANSI / VT)
+- 메인 화면 아트 배너 + 진입 시 로고 아트가 좌르륵 쏟아지는 레인 연출 (숫자/문자 아님)
+- 공격 실행 시 '문단별 조르륵' 연출 (타자기 + 단락 폭포 출력)
+- 공격 진행 중 1초 단위 실시간 상태바
+- 대화형 메인 메뉴 (공격 마법사 / 툴 콘솔 / 명령어 직접 실행)
+
+이 모듈은 start.py 에서 import 되어 사용됩니다.
+단독 실행(python ddos_art.py) 시 연출 미리보기 데모로 동작합니다.
+"""
+import os
+import sys
+import time
+import shutil
+import ctypes
+import subprocess
+
+
+# ---------------------------------------------------------------------------
+# ANSI 색상 상수
+# ---------------------------------------------------------------------------
+class C:
+    R = "\x1b[91m"     # 밝은 빨강
+    G = "\x1b[92m"     # 밝은 초록
+    Y = "\x1b[93m"     # 밝은 노랑
+    B = "\x1b[94m"     # 밝은 파랑
+    M = "\x1b[95m"     # 밝은 자홍
+    CY = "\x1b[96m"    # 밝은 청록
+    W = "\x1b[97m"     # 밝은 흰색
+    DIM = "\x1b[2m"
+    BOLD = "\x1b[1m"
+    UND = "\x1b[4m"
+    REV = "\x1b[7m"
+    RST = "\x1b[0m"
+
+
+# 배너에 사용할 무지개 계열 색 순환
+RAINBOW = [C.M, C.CY, C.W, C.CY, C.G, C.Y, C.R, C.M]
+
+
+# ---------------------------------------------------------------------------
+# 그림(아트) 원문
+#   MAIN_ART : 더블라인 박스(╔═╗) 스타일 직접 제작 (3행)
+#   그 외     : pyfiglet(font: slant) 으로 생성
+# ---------------------------------------------------------------------------
+MAIN_ART = """                                            ╔═╗ ╔═╗ ╔═╗ ╔╗╔
+                                            ╠═╝ ╠═╣  ║  ║ ║
+                                            ║ ║ ╩ ╩ ╚═╝ ╝╚╝
+"""
+
+ATTACK_ART = """    ___  _______________   ________ __
+   /   |/_  __/_  __/   | / ____/ //_/
+  / /| | / /   / / / /| |/ /   / ,<
+ / ___ |/ /   / / / ___ / /___/ /| |
+/_/  |_/_/   /_/ /_/  |_\\____/_/ |_|
+"""
+
+FINISH_ART = """    ___________   ___________ __  __
+   / ____/  _/ | / /  _/ ___// / / /
+  / /_   / //  |/ // / \\__ \\/ /_/ /
+ / __/ _/ // /|  // / ___/ / __  /
+/_/   /___/_/ |_/___//____/_/ /_/
+"""
+
+# 서브 화면(메뉴 1~5 선택 시) 전용 배너
+LAYER7_ART = """    __    _____  ____________     _____
+   / /   /   \\ \\/ / ____/ __ \\   /__  /
+  / /   / /| |\\  / __/ / /_/ /_____/ /
+ / /___/ ___ |/ / /___/ _, _/_____/ /
+/_____/_/  |_/_/_____/_/ |_|     /_/
+"""
+
+LAYER4_ART = """    __    _____  ____________        __ __
+   / /   /   \\ \\/ / ____/ __ \\      / // /
+  / /   / /| |\\  / __/ / /_/ /_____/ // /_
+ / /___/ ___ |/ / /___/ _, _/_____/__  __/
+/_____/_/  |_/_/_____/_/ |_|        /_/
+"""
+
+TOOLS_ART = """  __________  ____  __   _____
+ /_  __/ __ \\/ __ \\/ /  / ___/
+  / / / / / / / / / /   \\__ \\
+ / / / /_/ / /_/ / /______/ /
+/_/  \\____/\\____/_____/____/
+"""
+
+METHODS_ART = """    __  _________________  ______  ____  _____
+   /  |/  / ____/_  __/ / / / __ \\/ __ \\/ ___/
+  / /|_/ / __/   / / / /_/ / / / / / / /\\__ \\
+ / /  / / /___  / / / __  / /_/ / /_/ /___/ /
+/_/  /_/_____/ /_/ /_/ /_/\\____/_____//____/
+"""
+
+EXPERT_ART = """    _______  __ ____  __________  ______
+   / ____/ |/ // __ \\/ ____/ __ \\/_  __/
+  / __/  |   // /_/ / __/ / /_/ / / /
+ / /___ /   |/ ____/ /___/ _, _/ / /
+/_____//_/|_/_/   /_____/_/ |_| /_/
+"""
+
+
+# ---------------------------------------------------------------------------
+# Brain 스타일 로고 & 패널  -- 참조 화면 (brain1 /brain2) 재현
+# ---------------------------------------------------------------------------
+BRAIN_ART = r""" ____  _____            _____ _   _ 
+|  _ \|  __ \     /\   |_   _| \ | |
+| |_) | |__) |   /  \    | | |  \| |
+|  _ <|  _  /   / /\ \   | | | . ` |
+| |_) | | \ \  / ____ \ _| |_| |\  |
+|____/|_|  \_\/_/    \_\_____|_| \_|
+"""
+
+BRAIN_HEADER_USER = "shavsheti"
+BRAIN_HEADER = ("shavsheti  [ ]  DISCORD:  braindevs.  [ ]  Power Upgraded .  New Design!")
+BRAIN_TAGLINE = "Progress, not perfection."
+BRAIN_WELCOME_1 = "Welcome To The Start Screen Of BrainNetv5.0"
+BRAIN_WELCOME_2 = "Powered By Brainv9 , Ran by Gecko"
+BRAIN_DISCORD = "-  https://discord.gg/HsMBBPZAW  -"
+BRAIN_HELP = 'Type "help" For the list of commands'
+BRAIN_COPY = "Copyright © 2026 Brain all rights reserved"
+BRAIN_PROMPT_USER = "shavsheti"
+BRAIN_PROMPT_NAME = "Brain"
+
+
+_VERSION = "v2.4 SNAPSHOT"
+_METHOD_COUNT = "56+"
+
+# ---------------------------------------------------------------------------
+# 인트로 '아트 레인' 대형 로고 -- 숫자/문자 대신 이 로고가 좌르륵 쏟아져 내려온다
+# ---------------------------------------------------------------------------
+RAIN_ART = """
+
+ :::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::: 
+ :::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::: 
+ :::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::: 
+ :::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::: 
+ :::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::: 
+ :::::::::::::::::::::::::::::             -::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::: 
+ :::::::::::::::::::::::*::     ::::::          ::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::: 
+ ::::::::::::::::::::    ::::::::::   -:::::    :::::::::::::::::::::  :::::::::::::::::::::::::::::::::::::::: 
+ ::::::::::::::::    ::::::::::::*    ::::::*   -::::::::::::::::::   :::::::     ::::::::::::::::::::::::::::: 
+ :::::::::::::::  *::::::::::::*    :::::::     :::::::::::::::::::      -::::::     *::::::::::::::::::::::::: 
+ ::::::::::::::   :::::::: ::::     :::::::     ::::::::::::::   -   :::::::::* ::::::::::::::::::::::::::::::: 
+ ::::::::::::::   :::::::  ::     :::::     ::::::::::::::   ::     ::::::::  :::::::::  ::::      :::::::::::: 
+ :::::::::::::::   *:-   :::     -    ::::::::::::::::::- ::::     :::::      ::::::     *:  *:    :::::::::::: 
+ :::::::::::::: -   :::::     :::    -::::::::::::::::- -::::      :::  --   -:::   :      ::::    :::::::::::: 
+ :::::::::::::::::::::::::     :::::     ::::::::                :::- ::    ::::::::     ::::     ::::::::::::: 
+ :::::::::     ::::::::::    -:::::     *::::::   :  ::::::      ::::::     :::::::     ::::     ::::::*::::::: 
+ ::::::::   :::::::::::-    ::::::     ::::::  :::  :::::::     ::::::    ::::: -:    -::::     :::::  :::::::: 
+ :::::::   :::::::::::    -::::::     :::::  :::  ::::::::     ::::::    -::::  :     ::::     :::::  ::::::::: 
+ :::::::-  :::::::::    *::::::::     ::::::::  ::::::::-     :::  :-   -::   ::    ::::::    :::-   :::::::::: 
+ :::::::::   ::::    ::::::::::::::     :::   ::::::::*         *::::      ::::-   ::::::::       ::::::::::::: 
+ :::::::::::      ::::::::::::::::::::      :::::::::- :::::   ::::::::  *::::*  -::::::::::   -::::::::::::::: 
+ :::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::: 
+ :::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::: 
+ :::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::: 
+ :::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::: 
+ :::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::: 
+ :::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::: 
+ ::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
+ 
+"""
+
+# ---------------------------------------------------------------------------
+# 메인 화면 '아트 좌르륵(레인)' 설정
+# ---------------------------------------------------------------------------
+# 인트로 '한 번 좌르르륵 내려온 뒤 정지' 연출 타이밍
+RAIN_DROP_SEC = 0.45          # 최초 진입: 로고가 위에서 내려오는 드롭 시간(초)
+RAIN_REPEAT_DROP_SEC = 0.25   # 공격/작업 후 메인 복귀 시 드롭 시간(초)
+RAIN_HOLD_SEC = 1.0           # 최초 진입: 내려온 뒤 움직임 없이 정지하는 시간(초)
+RAIN_REPEAT_HOLD_SEC = 0.5    # 복귀 시 정지 시간(초)
+RAIN_DROP_FPS = 40            # 드롭 연출 프레임 레이트
+
+# (구) 폭포 연출 상수 -- 하위 호환용으로만 유지
+RAIN_FIRST_SEC = 2.6
+RAIN_REPEAT_SEC = 1.1
+RAIN_CHARS = "01ABCDEF#$%&@*+=^~[]{}|;:.,-_<>/\\"
+_RAIN_PLAYED = False     # 최초 진입 여부 (메인 화면 효과용)
+
+# ---------------------------------------------------------------------------
+# 콘솔 초기화
+# ---------------------------------------------------------------------------
+_COLOR = True          # 색상 사용 여부
+_INIT_DONE = False     # 초기화 1회 여부
+
+
+# ---------------------------------------------------------------------------
+# 블루 → 화이트 그라데이션 엔진
+#   콘솔에 출력되는 모든 텍스트에 "왼쪽에서 오른쪽으로 가는
+#   파란색 → 흰색 그라데이션"을 입힌다. (256색 팔레트)
+#
+# 동작 방식
+#   1) 텍스트를 줄 단위로 쪼갠 뒤, 각 줄에서 첫/마지막 보이는 글자의
+#      위치를 기준으로 글자 위치에 따라 48단계 램프에서 색 번호를 고른다.
+#   2) 기존 ANSI 색상 코드는 제거하고, 굵게/흐리게/밑줄/반전 같은
+#      스타일 속성만 유지한 채 글자마다 38;5;N 코드를 다시 입힌다.
+#   3) print / input 이 이 엔진을 통과하도록 모듈 전역에서 가로챈다.
+# ---------------------------------------------------------------------------
+import re as _re
+import builtins as _b
+
+_GRAD_FROM = (0, 120, 255)      # 파란색 (왼쪽 끝)
+_GRAD_TO = (255, 255, 255)      # 흰색 (오른쪽 끝)
+_GRAD_STEPS = 48                # 램프(ramp) 색 단계 수
+
+_RAMP_CACHE = None              # 색 램프 지연 계산 캐시
+
+
+def _near256(r, g, b):
+    """(r,g,b) 와 가장 가까운 xterm-256 색상 번호(16~255)를 돌려준다."""
+    best = 16
+    bd = None
+    for ri in range(6):          # 6x6x6 큐브 (0,95,135,175,215,255)
+        rv = 0 if ri == 0 else 55 + 40 * ri
+        for gi in range(6):
+            gv = 0 if gi == 0 else 55 + 40 * gi
+            for bi in range(6):
+                bv = 0 if bi == 0 else 55 + 40 * bi
+                d = (rv - r) ** 2 + (gv - g) ** 2 + (bv - b) ** 2
+                if bd is None or d < bd:
+                    bd, best = d, 16 + 36 * ri + 6 * gi + bi
+    for k in range(24):          # 회색 램프 232~255 도 후보에 포함
+        v = 8 + 10 * k
+        d = (v - r) ** 2 + (v - g) ** 2 + (v - b) ** 2
+        if d < bd:
+            bd, best = d, 232 + k
+    return best
+
+
+def _grad_ramp():
+    """파랑→흰색 _GRAD_STEPS 단계의 xterm-256 코드 배열 (지연 계산 + 캐시)."""
+    global _RAMP_CACHE
+    if _RAMP_CACHE is None:
+        n = max(1, _GRAD_STEPS - 1)
+        ramp = []
+        for i in range(_GRAD_STEPS):
+            t = i / float(n)
+            r = int(round(_GRAD_FROM[0] + (_GRAD_TO[0] - _GRAD_FROM[0]) * t))
+            g = int(round(_GRAD_FROM[1] + (_GRAD_TO[1] - _GRAD_FROM[1]) * t))
+            b = int(round(_GRAD_FROM[2] + (_GRAD_TO[2] - _GRAD_FROM[2]) * t))
+            ramp.append(_near256(r, g, b))
+        _RAMP_CACHE = ramp
+    return _RAMP_CACHE
+
+
+def _sgr_state(params, st):
+    """SGR 파라미터(정수 리스트)를 해석해 스타일 상태 dict 를 갱신한다.
+
+    색상 관련 코드(30~37/40~47/90~97/100~107/38/48)는 모두 버리고
+    굵게(1)·흐리게(2)·밑줄(4)·반전(7) 스타일만 보존한다.
+    """
+    i, n = 0, len(params)
+    while i < n:
+        p = params[i]
+        if p == 0:
+            st.update(bold=False, dim=False, under=False, rev=False)
+        elif p == 1:
+            st["bold"] = True
+        elif p == 2:
+            st["dim"] = True
+        elif p == 22:
+            st["bold"] = False
+            st["dim"] = False
+        elif p in (4, 21):
+            st["under"] = True
+        elif p == 24:
+            st["under"] = False
+        elif p == 7:
+            st["rev"] = True
+        elif p == 27:
+            st["rev"] = False
+        elif p in (38, 48):          # 확장 컬러 -- 뒤따르는 모드/값 파라미터도 건너뜀
+            if i + 1 < n and params[i + 1] == 5:
+                i += 2
+            elif i + 1 < n and params[i + 1] == 2:
+                i += 4
+        i += 1
+    return st
+
+
+def _attr_sgr(st, code):
+    """스타일 속성 + 그라데이션 색 code 를 담은 SGR 문자열 생성.
+    항상 '0'(리셋) 으로 시작해 이전 색이 새지 않게 한다."""
+    parts = ["0"]
+    if st.get("bold"):
+        parts.append("1")
+    if st.get("dim"):
+        parts.append("2")
+    if st.get("under"):
+        parts.append("4")
+    if st.get("rev"):
+        parts.append("7")
+    parts.append("38;5;%d" % code)
+    return "\x1b[" + ";".join(parts) + "m"
+
+
+_SGR_RE = _re.compile(r"\x1b\[[0-9;]*m")
+
+
+def _grad_line(line, ramp):
+    """한 줄 텍스트를 좌→우 블루→화이트 그라데이션 문자열로 변환한다.
+
+    - 보이는 글자가 없으면(빈 줄/제어 시퀀스만) 원문을 그대로 돌려준다.
+    - 공백/제어 문자(\r 등)는 칠하지 않되, 내부 공백은 위치 계산에 포함해
+      글자 사이 간격이 커도 그라데이션이 끊기지 않고 자연스럽게 이어진다.
+    """
+    if not line:
+        return line
+
+    # 1) 토큰 분해 : (type, text) -- txt=일반문자, sgr=스타일코드, ctl=기타 제어
+    toks = []
+    i, n = 0, len(line)
+    while i < n:
+        if line[i] == "\x1b" and i + 1 < n and line[i + 1] == "[":
+            j = i + 2
+            while j < n and not (0x40 <= ord(line[j]) <= 0x7E):
+                j += 1
+            if j >= n:                # 종결 문자 없이 끝남 -- 나머지 통째로
+                j = n - 1
+            j += 1
+            raw = line[i:j]
+            toks.append(("sgr" if raw.endswith("m") else "ctl", raw))
+            i = j
+        else:
+            j = i
+            while j < n and not (line[j] == "\x1b" and j + 1 < n and line[j + 1] == "["):
+                j += 1
+            toks.append(("txt", line[i:j]))
+            i = j
+
+    # 2) 첫/마지막 보이는(공백 아닌) 글자의 위치 계산
+    pos = 0
+    first = last = -1
+    for typ, txt in toks:
+        if typ != "txt":
+            continue
+        for ch in txt:
+            if ch != " " and ord(ch) >= 32 and ch != "\x7f":
+                if first < 0:
+                    first = pos
+                last = pos
+            pos += 1
+
+    if first < 0:                     # 보이는 글자가 없음 → 원문 그대로
+        return line
+
+    span = last - first
+    out = []
+    pos = 0
+    st = {"bold": False, "dim": False, "under": False, "rev": False}
+    for typ, txt in toks:
+        if typ == "sgr":
+            params = [int(x) for x in txt[2:-1].split(";") if x != ""]
+            if not params:
+                params = [0]
+            _sgr_state(params, st)
+        elif typ == "ctl":
+            out.append(txt)           # 커서 이동 등 제어 시퀀스는 그대로 보존
+        else:
+            for ch in txt:
+                if ch == " " or ord(ch) < 32 or ch == "\x7f":
+                    # 칠하지 않는 문자(공백/제어): 스타일 속성이 있으면 그 속성만 유지
+                    if st.get("bold") or st.get("dim") or st.get("under") or st.get("rev"):
+                        out.append(_attr_only_sgr(st))
+                    out.append(ch)
+                else:
+                    if span <= 0:
+                        t = 0.5
+                    else:
+                        t = (pos - first) / float(span)
+                    idx = int(round(t * (_GRAD_STEPS - 1)))
+                    out.append(_attr_sgr(st, ramp[idx]))
+                    out.append(ch)
+                pos += 1
+
+    # 마지막 글자에 남은 색을 리셋해 다음 출력에 영향이 없게 한다
+    out.append(C.RST)
+    return "".join(out)
+
+
+def _attr_only_sgr(st):
+    """색 없이 스타일 속성만 담은 SGR (속성 있는 공백용)."""
+    parts = ["0"]
+    if st.get("bold"):
+        parts.append("1")
+    if st.get("dim"):
+        parts.append("2")
+    if st.get("under"):
+        parts.append("4")
+    if st.get("rev"):
+        parts.append("7")
+    return "\x1b[" + ";".join(parts) + "m"
+
+
+def gradientize(text):
+    """텍스트를 블루→화이트 그라데이션 문자열로 변환한다.
+
+    - 색상 비활성(_COLOR=False) 또는 보이는 글자가 없는 입력은 원문 그대로.
+    - 줄 단위(\n 분리)로 그라데이션이 적용되어, 모든 줄이 왼쪽 끝 파랑에서
+      오른쪽 끝 흰색까지 자연스럽게 이어진다.
+    """
+    if not text or not _COLOR:
+        return text
+    if "\n" not in text:
+        return _grad_line(text, _grad_ramp())
+    ramp = _grad_ramp()
+    return "\n".join(_grad_line(ln, ramp) for ln in text.split("\n"))
+
+
+def _gprint(*args, sep=" ", end="\n", file=None, flush=False):
+    """모든 print 출력에 그라데이션을 입혀 내보내는 대체 print."""
+    stream = sys.stdout if file is None else file
+    text = sep.join(str(a) for a in args)
+    stream.write(gradientize(text + end))
+    if flush:
+        stream.flush()
+
+
+def _ginput(prompt=""):
+    """프롬프트 텍스트에도 그라데이션을 입히는 대체 input."""
+    return _b.input(gradientize(prompt))
+
+
+# 모듈 전체의 print / input 을 그라데이션 버전으로 대체
+# (함수 내부에서 print() 호출은 실행 시점에 이 모듈 전역을 참조하므로
+#  아래 선언 위치보다 먼저 정의된 함수에도 동일하게 적용된다.)
+print = _gprint
+input = _ginput
+
+
+def init():
+    """Windows 콘솔에서 VT(ANSI) 처리를 켜고 색상 지원 여부를 판단한다."""
+    global _COLOR, _INIT_DONE
+    if _INIT_DONE:
+        return _COLOR
+    _INIT_DONE = True
+
+    if os.environ.get("NO_COLOR"):
+        _COLOR = False
+        return _COLOR
+
+    if os.name == "nt":                      # Windows: cmd / powershell
+        try:
+            k32 = ctypes.windll.kernel32
+            out = k32.GetStdHandle(-11)      # STD_OUTPUT_HANDLE
+            mode = ctypes.c_uint32()
+            if k32.GetConsoleMode(out, ctypes.byref(mode)):
+                VT = 0x0004                  # ENABLE_VIRTUAL_TERMINAL_PROCESSING
+                k32.SetConsoleMode(out, mode.value | VT)
+        except Exception:
+            pass
+
+    _COLOR = bool(sys.stdout and sys.stdout.isatty())
+    return _COLOR
+
+
+def is_color():
+    return _COLOR
+
+
+def paint(text, code, bold=False):
+    """색상 코드로 감싼 문자열 반환. 색상 미지원 시 원문 그대로."""
+    if not _COLOR:
+        return text
+    return f"{C.BOLD if bold else ''}{code}{text}{C.RST}"
+
+
+def clear_screen():
+    if _COLOR:
+        print("\x1b[2J\x1b[H", end="", flush=True)
+    else:
+        print("\n" * 3)
+
+
+# ---------------------------------------------------------------------------
+# 출력 효과
+# ---------------------------------------------------------------------------
+def typewrite(text, delay=0.004, end="\n"):
+    """한 글자씩 흘러내리듯 출력 (조르륵).
+
+    텍스트 전체를 먼저 블루→화이트 그라데이션으로 칠한 뒤, 글자마다
+    자기 색 코드와 함께 원자적으로 내보낸다. (print 를 글자 단위로
+    쓰면 매 글자가 그라데이션 첫 단계인 파랑으로 다시 시작되므로
+    sys.stdout 에 직접 스트리밍한다.)
+    """
+    if not text and not end:
+        return
+    if not _COLOR:
+        # 색 미지원: 예전처럼 글자 단위 출력
+        for ch in text:
+            sys.stdout.write(ch)
+            sys.stdout.flush()
+            if delay:
+                time.sleep(delay)
+        if end:
+            sys.stdout.write(end)
+        sys.stdout.flush()
+        return
+
+    out = gradientize(text)
+    pending = []          # 다음 글자와 함께 내보낼 대기 중 SGR 조각
+    i, n = 0, len(out)
+    while i < n:
+        ch = out[i]
+        if ch == "\x1b":
+            j = i + 1
+            k = n
+            if j < n and out[j] == "[":
+                k = j + 1
+                while k < n and not (0x40 <= ord(out[k]) <= 0x7E):
+                    k += 1
+                if k < n:
+                    k += 1
+            raw = out[i:k]
+            if raw.endswith("m"):
+                pending.append(raw)        # SGR 은 글자와 함께 원자적 출력
+            else:
+                # 커서 이동/화면 제어 등: 즉시 반영
+                if pending:
+                    sys.stdout.write("".join(pending))
+                    pending = []
+                sys.stdout.write(raw)
+                sys.stdout.flush()
+            i = k
+        else:
+            if pending:
+                sys.stdout.write("".join(pending))
+                pending = []
+            sys.stdout.write(ch)
+            sys.stdout.flush()
+            if delay:
+                time.sleep(delay)
+            i += 1
+    if pending:
+        sys.stdout.write("".join(pending))
+        pending = []
+    if end:
+        sys.stdout.write(end)
+    sys.stdout.flush()
+
+
+def cascade(lines, delay=0.002, color=None, indent="", pause=0.0):
+    """여러 줄을 위에서 아래로 빠르게 흘려보낸다."""
+    for ln in lines:
+        if color:
+            ln = paint(ln, color)
+        typewrite(indent + ln, delay=delay)
+        if pause:
+            time.sleep(pause)
+
+
+def pour(paragraphs, para_gap=0.16, char_delay=0.003, indent="  "):
+    """
+    '문단별 조르륵' 폭포 출력.
+
+    paragraphs : list of list[str]  (문단 -> 줄들)
+    각 문단이 끝나면 잠깐 멈췄다가 다음 문단이 주르륵 흘러내린다.
+    """
+    first = True
+    for para in paragraphs:
+        if not first:
+            time.sleep(para_gap)
+        first = False
+        if isinstance(para, str):
+            para = [para]
+        for ln in para:
+            typewrite(indent + ln, delay=char_delay)
+        print("", flush=True)
+
+
+def banner_rainbow(art, color_cycle=None):
+    """아트 각 줄에 무지개 색을 순환 입힌다."""
+    cycle = color_cycle or RAINBOW
+    lines = art.rstrip("\n").split("\n")
+    out = []
+    for i, ln in enumerate(lines):
+        if ln.strip():
+            out.append(paint(ln, cycle[i % len(cycle)], bold=True))
+        else:
+            out.append("")
+    return out
+
+
+def term_width():
+    try:
+        return shutil.get_terminal_size((100, 24)).columns
+    except Exception:
+        return 100
+
+
+def _term_wh():
+    """현재 터미널 크기 (가로, 세로). 측정 불가 시 안전 기본값."""
+    try:
+        sz = shutil.get_terminal_size((100, 25))
+        w = max(30, min(sz.columns, 220))
+        h = max(10, min(sz.lines, 60))
+        return w, h
+    except Exception:
+        return 100, 25
+
+
+# ---------------------------------------------------------------------------
+# 아트 폭포 (레인) -- 로고 아트가 좌르륵 쏟아져 내려오는 연출 (숫자/문자 폭포 대체)
+# ---------------------------------------------------------------------------
+def _art_rows(art):
+    """아트 원문을 줄 폭이 같은 정규화된 줄 리스트로 만든다."""
+    lines = art.rstrip("\n").split("\n")
+    rows = [ln.rstrip() for ln in lines]
+    while rows and not rows[0].strip():
+        rows.pop(0)
+    while rows and not rows[-1].strip():
+        rows.pop()
+    if not rows:
+        return []
+    width = max(len(ln) for ln in rows)
+    return [ln + " " * (width - len(ln)) for ln in rows]
+
+
+def _shrink_half(row):
+    """가로 2칸 -> 1칸 절반 블록 압축 (아트가 터미널 폭보다 넓을 때만 사용)."""
+    chars = []
+    i = 0
+    while i + 1 < len(row):
+        a, b = row[i], row[i + 1]
+        if a == " " and b == " ":
+            chars.append(" ")
+        elif a == "\u2588" and b == "\u2588":
+            chars.append("\u2588")
+        elif a == "\u2588":
+            chars.append("\u258c")     # ▌ 왼쪽 반 블록
+        else:
+            chars.append("\u2590")     # ▐ 오른쪽 반 블록
+        i += 2
+    if i < len(row):
+        chars.append(row[i])
+    return "".join(chars)
+
+
+def art_rain(seconds=2.0, fps=14, art=None, palette=None):
+    """
+    화면 전체를 가득 채운 로고 아트가 위에서 아래로 좌르륵 쏟아지는 폭포 연출.
+
+    숫자/문자가 내려오던 기존 레인 대신, RAIN_ART(█ 블록 로고)가
+    세로로 끝없이 이어진 커튼이 되어 흘러내린다. 줄마다 색이 순환하며,
+    화면 폭이 아트보다 좁으면 절반 블록(▌▐)으로 자동 압축해 줄바꿈을 막는다.
+
+    색상/터미널이 아니면 아무 일도 하지 않고, 터미널이 블록 문자(█ 등)를
+    표현하지 못하면 예전 숫자 레인(matrix_rain)으로 대체한다.
+    """
+    if not (_COLOR and sys.stdout and sys.stdout.isatty()):
+        return
+    if seconds <= 0:
+        return
+    if art is None:
+        art = RAIN_ART
+    if not art or not art.strip():
+        return
+
+    # 블록 문자(█▌▐)를 쓸 수 없는 환경이면 기존 숫자 레인으로 폴백
+    if not _wide_ok():
+        return matrix_rain(seconds, fps=min(int(fps), 30))
+
+    rows = _art_rows(art)
+    if not rows:
+        return
+    n_rows = len(rows)
+
+    W, H = _term_wh()
+    H = max(6, H - 1)              # 맨 아래 한 줄은 예약
+
+    aw = len(rows[0])
+    if aw >= W:                    # 아트가 화면보다 넓으면 절반 블록으로 압축
+        rows = [_shrink_half(r) for r in rows]
+        aw = len(rows[0])
+    if aw > W:
+        rows = [r[:W] for r in rows]   # 그래도 넘으면 잘라내기 (줄바꿈 방지)
+        aw = W
+    lead = " " * ((W - aw) // 2) if aw < W else ""   # 화면 가운데 정렬
+
+    palette = palette or RAINBOW
+    # 블루→화이트 그라데이션 : 줄마다 독립적으로 왼쪽→오른쪽 램프를 적용한다.
+    # 기존 rainbow 는 줄 색을 돌렸지만, 이제 모든 줄이 같은 blue→white 테마를 쓴다.
+    # 원문 아트에는 SGR 가 없으므로 bold(\x1b[1m) 를 앞에 붙여 굵기를 보존한다.
+    colored = [gradientize("\x1b[1m" + r) for r in rows]
+
+    hide = "\x1b[?25l"
+    show = "\x1b[?25h"
+    erase = "\x1b[K"
+    step = 1.0 / max(1.0, float(fps))
+    next_tick = time.time()
+    deadline = next_tick + seconds
+    top = 0
+
+    sys.stdout.write(hide)
+    try:
+        while True:
+            if time.time() >= deadline:
+                break
+            # 아트 테이프를 한 줄씩 아래로 밀며 전체 화면을 다시 그린다
+            lines_out = []
+            for y in range(H):
+                r = (top + y) % n_rows
+                lines_out.append(lead + colored[r] + erase)
+            sys.stdout.write("\x1b[H" + "\n".join(lines_out))
+            sys.stdout.flush()
+            top = (top + 1) % n_rows
+            next_tick += step
+            delay = next_tick - time.time()
+            if delay > 0:
+                time.sleep(delay)
+    except KeyboardInterrupt:
+        pass                     # Ctrl+C 로 인트로 건너뛰기 허용
+    finally:
+        sys.stdout.write("\x1b[2J\x1b[H" + show)
+        sys.stdout.flush()
+
+
+def art_drop(drop_sec=0.45, hold_sec=1.0, fps=None, art=None, palette=None):
+    """
+    로고 아트(RAIN_ART)가 화면 위쪽(보이지 않는 곳)에서 아래로
+    '좌르르륵' 한 번 쏟아져 내려와 제자리에 멈추는 드롭 인트로 연출.
+
+    - 기존 폭포(art_rain)처럼 계속 흘러내리지 않는다. 내려온 뒤에는
+      완전히 정지해 hold_sec 초 동안 가만히 있다가 화면을 정리한다.
+    - 줄마다 무지개 색이 순환하며, 화면 폭이 아트보다 좁으면
+      절반 블록(▌▐)으로 자동 압축해 줄바꿈을 막는다.
+    - 색상/터미널이 아니면 아무 일도 하지 않고, 터미널이 블록 문자를
+      표현하지 못하면 예전 숫자 레인(matrix_rain)으로 대체한다.
+    - Ctrl+C 로 건너뛰면 즉시 화면을 정리한다.
+    """
+    if not (_COLOR and sys.stdout and sys.stdout.isatty()):
+        return
+    if drop_sec < 0 or hold_sec < 0:
+        return
+    if art is None:
+        art = RAIN_ART
+    if not art or not art.strip():
+        return
+
+    # 블록 문자(█▌▐)를 쓸 수 없는 환경이면 예전 숫자 레인으로 폴백
+    if not _wide_ok():
+        return matrix_rain(drop_sec + hold_sec, fps=min(int(fps or RAIN_DROP_FPS), 30))
+
+    rows = _art_rows(art)
+    if not rows:
+        return
+    n_rows = len(rows)
+
+    W, H = _term_wh()
+    H = max(6, H - 1)              # 맨 아래 한 줄은 예약
+
+    aw = len(rows[0])
+    if aw >= W:                    # 아트가 화면보다 넓으면 절반 블록으로 압축
+        rows = [_shrink_half(r) for r in rows]
+        aw = len(rows[0])
+    if aw > W:
+        rows = [r[:W] for r in rows]   # 그래도 넘으면 잘라내기 (줄바꿈 방지)
+        aw = W
+    lead = ' ' * ((W - aw) // 2) if aw < W else ''
+
+    palette = palette or RAINBOW
+    # 블루→화이트 그라데이션 : 줄마다 독립적으로 왼쪽→오른쪽 램프를 적용한다.
+    # 기존 rainbow 는 줄 색을 돌렸지만, 이제 모든 줄이 같은 blue→white 테마를 쓴다.
+    # 원문 아트에는 SGR 가 없으므로 bold(\x1b[1m) 를 앞에 붙여 굵기를 보존한다.
+    colored = [gradientize("\x1b[1m" + r) for r in rows]
+
+    step = 1.0 / max(1.0, float(fps or RAIN_DROP_FPS))
+
+    # 드롭 : 로고는 화면 위(-n_rows)에서 시작해 도착 위치까지 한 번 내려온다.
+    # 도착 위치는 화면이 여유 있으면 세로 중앙, 로고가 화면보다 크면 맨 위.
+    y_end = max(0, (H - n_rows) // 2)
+    y_start = -n_rows
+    dist = max(1, y_end - y_start)
+
+    hide = "\x1b[?25l"
+    show = "\x1b[?25h"
+    erase = "\x1b[K"
+    dur = max(0.0, float(drop_sec))
+    t0 = time.time()
+
+    def draw(y):
+        """현재 로고 위치 y 에 맞춰 화면 전체를 다시 그린다."""
+        out = ["\x1b[H"]
+        for yy in range(H):
+            ri = yy - y
+            if 0 <= ri < n_rows:
+                out.append(lead + colored[ri] + erase)
+            else:
+                out.append(erase)
+        sys.stdout.write("\n".join(out))
+        sys.stdout.flush()
+
+    sys.stdout.write(hide)
+    try:
+        while True:
+            el = time.time() - t0
+            if dur <= 0 or el >= dur:
+                y = y_end
+            else:
+                p = el / dur
+                p = 1.0 - (1.0 - p) ** 3   # 감속: 처음 좌르르륵, 끝은 부드럽게 착지
+                y = y_start + int(round(dist * p))
+            draw(y)
+            if dur > 0 and el < dur:
+                time.sleep(step)
+            else:
+                break
+        # 멈춘 상태 유지 : 다시 그리지 않고 가만히 hold_sec 초 대기
+        if hold_sec > 0:
+            time.sleep(hold_sec)
+    except KeyboardInterrupt:
+        pass                     # Ctrl+C 로 인트로 건너뛰기 허용
+    finally:
+        sys.stdout.write("\x1b[2J\x1b[H" + show)
+        sys.stdout.flush()
+
+
+# ---------------------------------------------------------------------------
+# (구) 디지털 문자 폭포 -- 블록 문자 미지원 콘솔 등 art_rain 의 대체용
+# ---------------------------------------------------------------------------
+def matrix_rain(seconds=2.0, fps=32, cols=0, rows=0,
+                head_prob=0.005, near_prob=0.03, dim_prob=0.16,
+                head_code="\x1b[97;1m", near_code="\x1b[92m",
+                dim_code="\x1b[32m"):
+    """
+    터미널 전체에 글자가 좌르륵 쏟아지는 디지털 폭포(레인) 연출.
+
+    각 세로 줄(컬럼)이 제각각의 속도로 아래로 흘러내리며,
+    머리 글자는 밝게, 뒤따르는 글자는 점점 어둡게 번진다.
+    색상이 꺼져 있거나 실제 터미널(콘솔)이 아니면 아무것도 하지 않는다.
+    """
+    if not (_COLOR and sys.stdout and sys.stdout.isatty()):
+        return
+    if seconds <= 0:
+        return
+
+    import random as _rnd
+
+    if cols > 0 and rows > 0:
+        W, H = cols, rows
+    else:
+        W, H = _term_wh()
+        H = max(6, H - 1)          # 맨 아래 한 줄은 예약
+
+    hp, np_, dp = head_prob, near_prob, dim_prob
+    n_chars = len(RAIN_CHARS)
+    rnd = _rnd.random
+
+    # 컬럼별 '흘러내린 위치'와 속도 (속도는 수시로 변해 자연스러운 흐름을 만든다)
+    off = [rnd() * 5000.0 for _ in range(W)]
+    spd = [_rnd.uniform(0.5, 1.35) for _ in range(W)]
+
+    rst = C.RST
+    hide = "\x1b[?25l"
+    show = "\x1b[?25h"
+    step = 1.0 / max(1, fps)
+    next_tick = time.time()
+    deadline = next_tick + seconds
+
+    sys.stdout.write(hide)
+    try:
+        while True:
+            now = time.time()
+            if now >= deadline:
+                break
+
+            for c in range(W):
+                off[c] += spd[c]
+                if rnd() < 0.03:
+                    spd[c] = _rnd.uniform(0.5, 1.35)
+
+            frame = ["\x1b[H"]
+            for r in range(H):
+                row = []
+                for c in range(W):
+                    k = int(off[c]) - r        # 문자 테이프 상 위치 (아래로 흐름)
+                    # 컬럼/위치 기반 결정적 난수 -> 깜빡임 없이 안정적인 이끼(꼬리)
+                    v = c * 2246822519 + k * 3266489917
+                    v ^= v >> 15
+                    v &= 0x7fffffff
+                    frac = (v % 100000) * 1e-5
+                    if frac < hp:
+                        ch = RAIN_CHARS[(k + c * 5) % n_chars]
+                        row.append(head_code + ch + rst)
+                    elif frac < hp + np_:
+                        ch = RAIN_CHARS[(k * 3 + c * 7) % n_chars]
+                        row.append(near_code + ch + rst)
+                    elif frac < hp + np_ + dp:
+                        ch = RAIN_CHARS[(k * 7 + c * 11) % n_chars]
+                        row.append(dim_code + ch + rst)
+                    else:
+                        row.append(" ")
+                frame.append("".join(row))
+            # 커서를 맨 위로 올려 한 화면을 통째로 덮어쓴다
+            sys.stdout.write("\n".join(frame) + "\x1b[0J")
+            sys.stdout.flush()
+
+            next_tick += step
+            delay = next_tick - time.time()
+            if delay > 0:
+                time.sleep(delay)
+    except KeyboardInterrupt:
+        pass                     # Ctrl+C 로 인트로 건너뛰기 허용
+    finally:
+        sys.stdout.write("\x1b[2J\x1b[H" + show)
+        sys.stdout.flush()
+
+
+# ---------------------------------------------------------------------------
+# 메인 화면
+# ---------------------------------------------------------------------------
+_BOOT_LINES = [
+    ("ESTABLISHING C2 UPLINK", "ONLINE"),
+    ("DECRYPTING PACKET PAYLOAD GRID", "UNLOCKED"),
+    ("MOUNTING LAYER-7 / LAYER-4 LAUNCHERS", "56+ UNITS"),
+    ("HANDSHAKE WITH ANONYMOUS GATEWAYS", "STANDBY"),
+]
+
+
+_BOOT_SHOWN = False     # 부팅 로그(스트림)는 최초 1회만 출력
+
+
+# ---------------------------------------------------------------------------
+# Brain 스타일 렌더링 헬퍼 (뉴1 / 뉴2 스타일)
+# ---------------------------------------------------------------------------
+_BOX_V = "|"
+_BOX_H = "-"
+_BOX_TL = "/"
+_BOX_TR = "\\"
+_BOX_BL = "\\"
+_BOX_BR = "/"
+
+# ANSI 256색 팔레트에서 빨강 계열 (어두움 -> 밝음 그라데이션 룩)
+def _red_grad(i, n):
+    """i(0..n-1) 에 따라 어두운 빨강 -> 밝은 빨강 256색 코드 반환."""
+    if n <= 1:
+        return "\x1b[38;5;160m"
+    steps = [88, 124, 160, 196, 202, 208, 214, 220]   # 어두움 -> 밝음 (빨강->주황)
+    t = i / (n - 1)
+    idx = t * (len(steps) - 1)
+    lo = int(idx)
+    hi = min(lo + 1, len(steps) - 1)
+    frac = idx - lo
+    base = steps[lo]
+    nxt = steps[hi]
+    # 256색 코드 사이 보간이 불가하므로 가까운 쪽으로 스냅
+    pick = steps[lo] if frac < 0.5 else steps[hi]
+    return f"\x1b[38;5;{pick}m"
+
+
+def brain_logo(art=BRAIN_ART):
+    """'BRAIN' 로고를 왼쪽(어두움)->오른쪽(밝음) 빨강 그라데이션으로 찍는다."""
+    lines = art.rstrip("\n").split("\n")
+    W = max((len(l) for l in lines), default=0)
+    out = []
+    for ln in lines:
+        row = []
+        for c, ch in enumerate(ln):
+            if ch == " ":
+                row.append(" ")
+            else:
+                code = _red_grad(c, W)
+                if _COLOR:
+                    row.append(f"{code}{ch}{C.RST}")
+                else:
+                    row.append(ch)
+        out.append("".join(row))
+    return out
+
+
+def _plain(s):
+    """ANSI 코드 제거 후 순수 길이(표시 폭) 계산."""
+    import re as _re
+    return len(_re.sub(r"\x1b\[[0-9;]*m", "", s))
+
+
+def box_panel(inner_lines, indent=2, title=None):
+    """뉴1 스타일 둥근 박스 패널. inner_lines는 이미 색칠된 문자열 리스트."""
+    if isinstance(inner_lines, str):
+        inner_lines = [inner_lines]
+    content_w = max([_plain(l) for l in inner_lines] + ([_plain(title) + 4] if title else [0]))
+    width = content_w + 2                 # 좌우 패딩 1칸씩
+    width = max(width, 22)
+    pad = " " * indent
+
+    if title:
+        # 상단: /---- title ----\
+        seg = pad + _BOX_TL + _BOX_H * 2 + " " + title + " "
+        top = seg + _BOX_H * max(1, width - (_plain(seg) - indent - len(pad) + 2)) + _BOX_TR
+    else:
+        top = pad + _BOX_TL + _BOX_H * max(2, width - 2) + _BOX_TR
+
+    body = []
+    if title:
+        body.append(top)
+    else:
+        body.append(top)
+    for ln in inner_lines:
+        pad_len = width - _plain(ln)
+        body.append(pad + _BOX_V + " " + ln + " " * max(0, pad_len - 2) + _BOX_V)
+    bottom = pad + _BOX_BL + _BOX_H * max(2, width - 2) + _BOX_BR
+    body.append(bottom)
+    return body
+
+
+def dotted_panel(title_lines, rows, indent=2, title_color=C.CY):
+    """뉴2 스타일: 제목 행 + 점선 리더(dotted leader) 행들.
+
+    title_lines : 배너 문자열 (Attack Details |  /  Target Details |)
+    rows        : list of (label, value_label, value)  -- value_label=(색상)
+    """
+    if isinstance(title_lines, str):
+        title_lines = [title_lines]
+    max_lab = max([_plain(l) for l in title_lines] + [len(r[0]) for r in rows], default=10)
+    total_w = max_lab + 26
+    pad = " " * indent
+
+    out = []
+    # 제목 행
+    for tl in title_lines:
+        out.append(pad + paint(tl, title_color, bold=True))
+    out.append("")
+
+    for label, vcolor, value in rows:
+        lead = max_lab - len(label) + 2
+        leader = "." * max(6, lead)
+        line = ("· " + paint(label, C.W) + " " +
+                paint(leader, C.DIM) + "  " +
+                paint(f"[ {value} ]", vcolor, bold=True))
+        out.append(pad + line)
+    return out
+
+
+def show_main_screen(intro=None):
+    """메인 아트 배너 + 타이틀.
+
+    intro=None : 자동 (첫 진입엔 '드롭 후 정지 1초', 복귀 시엔 짧은 드롭)
+    intro=숫자 : 연출(드롭+정지) 총 시간을 해당 초로 지정
+    intro=0    : 연출 없이 배너만
+    """
+    global _RAIN_PLAYED, _BOOT_SHOWN
+
+    if intro is None:
+        if not _RAIN_PLAYED:
+            drop_sec, hold_sec = RAIN_DROP_SEC, RAIN_HOLD_SEC
+            _RAIN_PLAYED = True
+        else:
+            drop_sec, hold_sec = RAIN_REPEAT_DROP_SEC, RAIN_REPEAT_HOLD_SEC
+    elif not intro:
+        drop_sec = hold_sec = 0.0
+    else:
+        # 숫자 지정 : 연출(드롭+정지) 총 시간으로 해석
+        total = max(0.0, float(intro))
+        drop_sec = min(RAIN_DROP_SEC, max(0.2, total * 0.4))
+        hold_sec = max(0.0, total - drop_sec)
+
+    # 1) 로고가 위에서 좌르르륵 한 번 내려와 정지한 뒤 메인으로 전환
+    if drop_sec > 0:
+        art_drop(drop_sec, hold_sec)
+
+    # 2) 배너 + 타이틀 렌더링
+    clear_screen()
+    banner = banner_rainbow(MAIN_ART)
+
+    # 상단 아트 : 한 줄씩 빠르게 흘리기
+    for ln in banner:
+        typewrite(ln, delay=0.0012)
+    time.sleep(0.08)
+
+    # 태그라인
+    tag = "=>>  RAIN  DISTRIBUTED  DENIAL-OF-SERVICE  ATTACK  ENGINE  <<="
+    print(paint(" " * max(0, (term_width() - len(tag)) // 2 - 8) + tag, C.R, bold=True))
+    line2 = f"  {_VERSION}   |   {_METHOD_COUNT} ATTACK METHODS   |   AUTHORIZED SECURITY TESTING ONLY"
+    print(paint(" " * max(0, (term_width() - len(line2)) // 2 - 8) + line2, C.CY))
+
+    # 3) 최초 진입 시에만 부팅 스트림 라인 (C2 패널 느낌)
+    if not _BOOT_SHOWN:
+        _BOOT_SHOWN = True
+        print("")
+        label_w = 44
+        for label, status in _BOOT_LINES:
+            # 줄 전체를 먼저 조립한 뒤 typewrite 한 번으로 흘린다.
+            # (typewrite 가 줄 단위로 블루→화이트 그라데이션을 연속 적용)
+            row = (paint("  " + label, C.W)
+                   + paint("." * max(0, label_w - len(label)) + " ", C.DIM)
+                   + paint(status, C.G, bold=True))
+            typewrite(row, delay=0.001)
+            time.sleep(0.06)
+        typewrite(paint("  ALL SYSTEMS READY  --  STAND BY FOR ORDERS", C.DIM),
+                  delay=0.0012)
+        time.sleep(0.1)
+    print("")
+
+
+def open_screen(art, header, sub=None):
+    """옵션 진입 화면 : 화면을 지우고 전용 아트 + 헤더를 크게 연출한다."""
+    clear_screen()
+    print("")
+    for ln in banner_rainbow(art):
+        typewrite(ln, delay=0.0012)
+    time.sleep(0.08)
+    bar = "=" * 56
+    print(paint(bar, C.DIM))
+    typewrite(paint("  " + header, C.W, bold=True), delay=0.002)
+    if sub:
+        typewrite(paint("  " + sub, C.CY), delay=0.002)
+    print(paint(bar, C.DIM))
+    print("")
+
+# ---------------------------------------------------------------------------
+# 공격 시작 연출
+# ---------------------------------------------------------------------------
+_LAYER7_LABEL = {
+    "GET": "HTTP GET FLOOD", "POST": "HTTP POST FLOOD",
+    "HEAD": "HTTP HEAD FLOOD", "NULL": "NULL USER-AGENT FLOOD",
+    "COOKIE": "COOKIE STORM", "OVH": "OVH BYPASS",
+    "CFB": "CLOUDFLARE BYPASS", "CFBUAM": "CLOUDFLARE UAM BYPASS",
+    "BYPASS": "BYPASS", "DGB": "DDoS-GUARD BYPASS",
+    "AVB": "AV BYPASS", "GSB": "GSE BYPASS",
+    "PPS": "PPS FLOOD", "EVEN": "EVEN FLOOD",
+    "STRESS": "STRESS FLOOD", "DYN": "RANDOM SUBDOMAIN FLOOD",
+    "SLOW": "SLOWLORIS", "APACHE": "APACHE FLOOD",
+    "XMLRPC": "XML-RPC FLOOD", "BOT": "BOT FLOOD",
+    "BOMB": "BOMBARDIER", "DOWNLOADER": "SLOW DOWNLOADER",
+    "KILLER": "KILLER FLOOD", "TOR": "TOR FLOOD",
+    "RHEX": "RANDOM HEX FLOOD", "STOMP": "STOMP / CAPTCHA BYPASS",
+}
+
+
+def _layer_label(method):
+    return _LAYER7_LABEL.get(method.upper(), method)
+
+
+def show_attack_start(method, target, address, port, threads, duration,
+                      is_layer7=True, proxy_count=0):
+    """
+    공격 발사 직전 '무기 장전 + 타겟 정보' 연출을 문단별로 흘려보낸다.
+    """
+    layer = "LAYER-7 / HTTP FLOOD" if is_layer7 else "LAYER-4 / NETWORK FLOOD"
+    method_disp = method.upper()
+
+    paragraphs = [
+        # 문단 1 : 타겟 정보
+        [paint("[TARGET-SYSTEM]", C.CY, bold=True),
+         "",
+         paint(f"  HOST     : {target}", C.W),
+         paint(f"  ADDRESS  : {address}", C.W),
+         paint(f"  PORT     : {port or 80}", C.W)],
+        # 문단 2 : 공격 설정
+        [paint("[ATTACK-PROFILE]", C.Y, bold=True),
+         "",
+         paint(f"  METHOD   : {method_disp:<10} ({layer})", C.Y),
+         paint(f"  THREADS  : {threads:,}", C.Y),
+         paint(f"  DURATION : {duration} SEC", C.Y),
+         paint(f"  PROXY    : {proxy_count:,} ACTIVE" if proxy_count else
+               f"  PROXY    : NONE (DIRECT)", C.Y)],
+    ]
+
+    # 문단 1 : 화면을 정리하고 대형 ATTACK 아트를 전체에 연출
+    clear_screen()
+    print("")
+    for ln in banner_rainbow(ATTACK_ART, color_cycle=[C.R, C.Y, C.R, C.W]):
+        typewrite(ln, delay=0.0018)
+    time.sleep(0.1)
+
+    # 문단 2 : 타겟 / 설정 요약을 문단별로 조르륵
+    pour(paragraphs, para_gap=0.22, char_delay=0.0045)
+
+    # 문단 3 : 장전/기동 연출
+    steps = [
+        "[>] ARMING PACKET ENGINE ............ " + paint("OK", C.G, bold=True),
+        "[>] LOADING PAYLOAD MAGAZINES ....... " + paint("OK", C.G, bold=True),
+        "[>] WARMING UP CONNECTION POOL ...... " + paint("OK", C.G, bold=True),
+        f"[>] SPINNING UP THREAD ARMY ........ {threads:,} UNITS " + paint("DEPLOYED", C.G, bold=True),
+        "[>] SYNCHRONIZING FIRE CONTROL ...... " + paint("LOCKED", C.G, bold=True),
+    ]
+    for st in steps:
+        typewrite(paint("  ", C.R) + st, delay=0.006)
+    time.sleep(0.1)
+
+    print(paint("  ********  ALL ENGINES ENGAGED  --  UNLEASH THE STORM  ********", C.R, bold=True))
+    print("", flush=True)
+    time.sleep(0.2)
+
+
+# ---------------------------------------------------------------------------
+# 실시간 상태바
+# ---------------------------------------------------------------------------
+_SPIN = ("-", "\\", "|", "/")
+
+
+def _human_unit(num, suffix):
+    for unit in ("", "K", "M", "G", "T", "P"):
+        if num < 1000:
+            return f"{num:.1f} {unit}{suffix}"
+        num /= 1000.0
+    return f"{num:.1f} E{suffix}"
+
+
+def human_bps(num):
+    """BPS 표기 간소화."""
+    return _human_unit(num, "B/s").replace(" B/s", " B/s")
+
+
+def human_size(num):
+    """바이트 합계 표기."""
+    return _human_unit(num, "B").replace("B/s", "B") if False else \
+        _human_unit(num, "B").replace(" B", " B")
+
+
+def human_bytes(num):
+    """전송량 합계 표기 (B/KB/MB/GB)."""
+    return _human_unit(num, "B").replace("KB", "KB")
+
+
+def human_pps(num):
+    """PPS 표기 간소화."""
+    for unit in ("", "k", "M", "G"):
+        if num < 1000:
+            return f"{num:.1f}{unit}"
+        num /= 1000.0
+    return f"{num:.1f}T"
+
+
+def _wide_ok():
+    """현재 stdout 인코딩으로 █ ░ 블록 문자를 쓸 수 있는지 검사."""
+    try:
+        enc = getattr(sys.stdout, "encoding", None) or "utf-8"
+        "\u2588\u2591".encode(enc)
+        return True
+    except Exception:
+        return False
+
+
+def render_status(step, total_steps, method, target, pps, bps, threads,
+                  elapsed, duration):
+    """1초마다 갱신되는 단일 라인 진행 상태바."""
+    pct = min(100.0, max(0.0, elapsed / max(duration, 1) * 100.0))
+    bar_w = 18
+    filled = int(round(pct / 100.0 * bar_w))
+    if _wide_ok():
+        bar = "\u2588" * filled + "\u2591" * (bar_w - filled)   # █ ░
+    else:
+        bar = "#" * filled + "-" * (bar_w - filled)             # ASCII fallback
+
+    spin = _SPIN[step % len(_SPIN)]
+    info = (f"{paint('[' + spin + ']', C.M)}"
+            f"{paint(' ' + method.upper(), C.CY, bold=True)}"
+            f"{paint(' ' + target[:40], C.W)}"
+            f"{paint('  [' + bar + ']', C.G)}"
+            f"{paint(f' {pct:5.1f}%', C.Y)}"
+            f"{paint(f' PPS {human_pps(pps):>8}', C.CY)}"
+            f"{paint(f' BPS {human_bps(bps):>10}', C.M)}"
+            f"{paint(f' {elapsed:>4}s/{duration}s', C.W)}"
+            f"{paint(f' T:{threads}', C.DIM)}")
+
+    width = min(term_width() - 1, 100)
+    pad = max(0, width - _plain_len(info))
+    try:
+        print("\r" + info + " " * pad, end="", flush=True)
+    except UnicodeEncodeError:
+        plain = (f"\r[{spin}] {method.upper()} {target[:30]} "
+                 f"[{bar}] {pct:5.1f}% PPS {pps} BPS {bps} "
+                 f"{elapsed}s/{duration}s T:{threads}")
+        print(plain + " " * max(0, width - len(plain)), end="", flush=True)
+
+
+def _plain_len(styled):
+    """ANSI 코드를 제거한 순수 길이 계산."""
+    import re as _re
+    return len(_re.sub(r"\x1b\[[0-9;]*m", "", styled))
+
+
+# ---------------------------------------------------------------------------
+# 공격 종료 연출
+# ---------------------------------------------------------------------------
+def show_attack_end(total_requests, total_bytes):
+    """종료 후 화면을 정리하고 대형 FINISH 아트 + 통계 요약을 연출."""
+    clear_screen()
+    print("")
+    for ln in banner_rainbow(FINISH_ART, color_cycle=[C.G, C.CY, C.G, C.W]):
+        typewrite(ln, delay=0.0025)
+    time.sleep(0.1)
+    print(paint("  ********  ALL ENGINES HALTED  --  ATTACK MISSION COMPLETE  ********", C.G, bold=True))
+    print("")
+
+    summary = [
+        f"[+] FIRE CONTROL        : ALL ENGINES HALTED",
+        f"[+] TOTAL PACKETS SENT  : {total_requests:,}",
+        f"[+] TOTAL BYTES DEPLOYED: {human_bytes(total_bytes) if total_bytes else '0 B'}",
+        f"[+] MISSION STATUS      : COMPLETE",
+    ]
+    for st in summary:
+        typewrite(paint(st, C.G), delay=0.008)
+    print("", flush=True)
+
+
+# ---------------------------------------------------------------------------
+# 대화형 메인 메뉴
+# ---------------------------------------------------------------------------
+def _ask(prompt_text, default=None):
+    """기본값이 있으면 엔터로 그대로."""
+    if default is not None:
+        prompt_text = f"{prompt_text} [{default}] "
+    try:
+        val = input(prompt_text).strip()
+    except (EOFError, KeyboardInterrupt):
+        print("")
+        raise SystemExit(0)
+    return val if val else (default if default is not None else "")
+
+
+def _ask_int(prompt_text, default, minimum=1, maximum=None):
+    """정수 입력 검증 프롬프트. 잘못된 값이면 다시 물어본다.
+    MENU / BACK / Q / EXIT 입력 시 None 을 돌려 호출부에서 취소 처리한다."""
+    if default is not None:
+        prompt_text = f"{prompt_text} [{default}] "
+    while True:
+        try:
+            raw = input(prompt_text).strip()
+        except (EOFError, KeyboardInterrupt):
+            print("")
+            raise SystemExit(0)
+        if not raw:
+            raw = default
+        up = raw.upper()
+        if up in {"MENU", "BACK", "Q", "EXIT", "CANCEL", "X"}:
+            return None
+        try:
+            val = int(up)
+        except ValueError:
+            print(paint(f"[!] 숫자만 입력하세요. (예: {default})", C.R))
+            continue
+        if val < minimum:
+            print(paint(f"[!] {minimum} 이상이어야 합니다.", C.R))
+            continue
+        if maximum is not None and val > maximum:
+            print(paint(f"[!] {maximum} 이하여야 합니다.", C.R))
+            continue
+        return val
+
+
+def _ask_required(prompt_text, err_msg):
+    """빈 값이면 err_msg 를 출력하고 같은 질문을 다시 물어본다.
+    MENU / BACK / Q / EXIT 입력 시 None 을 돌려 호출부에서 취소 처리한다."""
+    while True:
+        try:
+            val = input(prompt_text).strip()
+        except (EOFError, KeyboardInterrupt):
+            print("")
+            raise SystemExit(0)
+        if not val:
+            print(paint(f"[!] {err_msg}", C.R))
+            continue
+        if val.upper() in {"MENU", "BACK", "Q", "EXIT", "CANCEL", "X"}:
+            return None
+        return val
+
+
+def _run_attack(script, argv_args):
+    """start.py 를 서브프로세스로 실행 (메인 화면은 다시 안 띄움)."""
+    print("")
+    typewrite(paint("[i] EXECUTING ATTACK MODULE .........", C.CY), delay=0.003)
+    typewrite(paint("OK", C.G, bold=True), delay=0.01)
+    print("", flush=True)
+    try:
+        subprocess.run([sys.executable, script] + argv_args, check=False)
+    except KeyboardInterrupt:
+        print("")
+        typewrite(paint("[!] ATTACK INTERRUPTED BY OPERATOR", C.Y), delay=0.004)
+    except Exception as exc:
+        print(paint(f"[!] LAUNCH FAILED : {exc}", C.R, bold=True))
+
+
+# ---------------------------------------------------------------------------
+# METHODS 색상 그리드 (마법사 / EXPERT / 전체보기 공용)
+# ---------------------------------------------------------------------------
+_METHOD_PALETTE = [C.CY, C.G, C.Y, C.M, C.B, C.R, C.W]
+
+
+def _method_color(idx):
+    """METHODS 그리드에서 인덱스에 따라 매번 다른 글자색을 돌려준다."""
+    return _METHOD_PALETTE[idx % len(_METHOD_PALETTE)]
+
+
+def show_method_panel(title, methods, numbered=False, indent="  "):
+    """METHODS 목록 전체를 글자색이 들어간 컬럼 그리드로 출력한다.
+
+    numbered=True 면 앞에 1~N 번호를 붙여 보여준다(마법사 선택용).
+    이름이 아니라 번호만으로도 어떤 메소드인지 색상으로 바로 구분된다.
+    """
+    mlist = sorted({str(m).upper() for m in methods})
+    if not mlist:
+        return
+    print(paint(f"{indent}[ {title} ]", C.Y, bold=True))
+    digits = len(str(len(mlist)))
+    name_w = max(len(m) for m in mlist)
+    cell_w = (digits + 2 if numbered else 0) + name_w + 2
+    avail = max(40, term_width() - len(indent))
+    cols = max(1, min(6, avail // max(cell_w, 12)))
+    rows = [mlist[i:i + cols] for i in range(0, len(mlist), cols)]
+    for r_i, row in enumerate(rows):
+        cells = []
+        for c_j, m in enumerate(row):
+            gi = r_i * cols + c_j
+            name = paint(m.ljust(name_w), _method_color(gi), bold=True)
+            if numbered:
+                cells.append(paint(f"{gi + 1:>{digits}}: ", C.DIM) + name)
+            else:
+                cells.append(name)
+        print(indent + ("   ".join(cells)).rstrip())
+    print("")
+
+
+_CANCEL_WORDS = {"MENU", "BACK", "Q", "EXIT", "CANCEL", "X", "QUIT"}
+
+
+def _pick_method(layer_title, methods, default_method):
+    """레이어 마법사 첫 화면에서 METHODS 전체를 색상/번호로 보여주고 하나를 고른다.
+
+    메소드 이름(GET, POST ...) 또는 목록 번호(1, 2, 3 ...)로 선택 가능.
+    MENU / BACK / Q 등 취소 입력 시 None 을 돌려준다.
+    """
+    methods = sorted(methods)
+    show_method_panel(layer_title + "  --  ALL METHODS", methods, numbered=True)
+    while True:
+        raw = (_ask("METHOD 선택 (이름 또는 번호)", default_method)
+               .strip().upper() or default_method)
+        if raw in _CANCEL_WORDS:
+            return None
+        if raw.isdigit():
+            idx = int(raw)
+            if 1 <= idx <= len(methods):
+                return methods[idx - 1]
+            print(paint(f"[!] 번호는 1 ~ {len(methods)} 사이로 입력하세요.", C.R))
+            continue
+        if raw in methods:
+            return raw
+        print(paint(f"[!] 알 수 없는 메소드: {raw}  (위 목록의 이름 또는 번호 입력)", C.R))
+
+
+def wizard_layer7(script, methods):
+    open_screen(LAYER7_ART, "LAYER-7  WEB FLOOD  (웹 공격 마법사)",
+                "GET / POST / OVH / CFB / DYN / SLOW / RHEX ... 공격 설정")
+    methods = sorted(methods)
+    default_method = "GET" if "GET" in methods else methods[0]
+    # 처음부터 모든 METHODS 를 색상/번호로 표시하고 이름 또는 번호로 선택
+    method = _pick_method("LAYER-7 (WEB)", methods, default_method)
+    if method is None:
+        return
+
+    url = _ask_required("TARGET URL  (예: https://example.com)", "타겟 URL 이 필요합니다.")
+    if url is None:
+        return
+    if not url.lower().startswith("http"):
+        url = "http://" + url
+
+    while True:
+        socks = _ask("SOCKS TYPE  0=ALL 1=HTTP 4=SOCKS4 5=SOCKS5 (기본 1)", "1").strip()
+        if not socks:
+            socks = "1"
+        if socks.upper() in {"MENU", "BACK", "Q", "EXIT", "CANCEL", "X"}:
+            return
+        if socks in {"0", "1", "4", "5", "6"}:
+            break
+        print(paint("[!] SOCKS TYPE 은 0, 1, 4, 5, 6 중 하나만 입력하세요.", C.R))
+
+    threads = _ask_int("THREADS  (스레드 수, 기본 300)", "300", minimum=1)
+    if threads is None:
+        return
+    rpc = _ask_int("RPC  (연결당 요청 수, 기본 1)", "1", minimum=1)
+    if rpc is None:
+        return
+    proxylist = _ask("PROXY LIST  (파일명, 기본 http.txt)", "http.txt").strip()
+    if not proxylist:
+        proxylist = "http.txt"
+    if proxylist.upper() in {"MENU", "BACK", "Q", "EXIT", "CANCEL", "X"}:
+        return
+    if "/" not in proxylist and not proxylist.lower().endswith(".txt"):
+        proxylist += ".txt"
+    duration = _ask_int("DURATION  (공격 시간 초, 기본 60)", "60", minimum=1)
+    if duration is None:
+        return
+
+    print("")
+    pour([
+        [paint("[공격 설정 확인]", C.Y, bold=True),
+         paint(f"  METHOD    : {method}", C.W),
+         paint(f"  TARGET    : {url}", C.W),
+         paint(f"  SOCKS     : {socks}    THREADS : {threads}", C.W),
+         paint(f"  RPC       : {rpc}    PROXY   : {proxylist}", C.W),
+         paint(f"  DURATION  : {duration} 초", C.W)],
+    ], para_gap=0.0, char_delay=0.004)
+    go = _ask("ENTER 로 공격 시작, C 입력 시 취소", "").upper()
+    if go in {"C", "CANCEL", "X", "NO"}:
+        return
+    _run_attack(script, [method, url, socks, str(threads), proxylist, str(rpc), str(duration)])
+
+
+def wizard_layer4(script, methods):
+    open_screen(LAYER4_ART, "LAYER-4  NETWORK FLOOD  (서버 공격 마법사)",
+                "TCP / UDP / SYN / ICMP / NTP / DNS / MEM / RDP 공격 설정")
+    methods = sorted(methods)
+    default_method = "TCP" if "TCP" in methods else methods[0]
+    # 처음부터 모든 METHODS 를 색상/번호로 표시하고 이름 또는 번호로 선택
+    method = _pick_method("LAYER-4 (NETWORK)", methods, default_method)
+    if method is None:
+        return
+
+    target = _ask_required("TARGET IP:PORT  (예: 1.2.3.4:80)", "타겟 IP:PORT 가 필요합니다.")
+    if target is None:
+        return
+    if ":" not in target:
+        target += ":80"
+    threads = _ask_int("THREADS  (기본 500)", "500", minimum=1)
+    if threads is None:
+        return
+    duration = _ask_int("DURATION  (초, 기본 60)", "60", minimum=1)
+    if duration is None:
+        return
+
+    print("")
+    pour([
+        [paint("[공격 설정 확인]", C.Y, bold=True),
+         paint(f"  METHOD    : {method}", C.W),
+         paint(f"  TARGET    : {target}", C.W),
+         paint(f"  THREADS   : {threads}", C.W),
+         paint(f"  DURATION  : {duration} 초", C.W)],
+    ], para_gap=0.0, char_delay=0.004)
+    go = _ask("ENTER 로 공격 시작, C 입력 시 취소", "").upper()
+    if go in {"C", "CANCEL", "X", "NO"}:
+        return
+    _run_attack(script, [method, target, str(threads), str(duration)])
+
+
+def expert_cmd(script, l7, l4):
+    open_screen(EXPERT_ART, "EXPERT  (명령어 직접 실행)",
+                "L7 / L4 인자를 한 줄로 직접 입력하는 고급 콘솔")
+    # 사용 가능한 METHODS 를 색상 그리드로 먼저 보여준다
+    show_method_panel("LAYER-7 (WEB) METHODS", sorted(l7))
+    show_method_panel("LAYER-4 (NETWORK) METHODS", sorted(l4))
+    pour([
+        ["  " + paint("L7", C.CY, bold=True) + " :  " +
+         paint("METHOD", C.Y, bold=True) +
+         " URL SOCKS THREADS PROXYLIST RPC DURATION",
+         "        예) " + paint("GET", C.G, bold=True) +
+         " https://example.com 1 300 http.txt 1 60"],
+        ["  " + paint("L4", C.CY, bold=True) + " :  " +
+         paint("METHOD", C.Y, bold=True) + " IP:PORT THREADS DURATION",
+         "        예) " + paint("UDP", C.G, bold=True) + " 1.2.3.4:53 200 60"],
+        ["  BACK / MENU 로 돌아가기"],
+    ], para_gap=0.1, char_delay=0.003)
+    line = _ask("\U0001d4e1\U0001d4b6\U0001d4be\U0001d4c3# ")
+    if not line or line.upper() in {"BACK", "MENU", "EXIT", "Q"}:
+        return
+    parts = line.split()
+    if not parts:
+        return
+    method = parts[0].upper()
+    if method in l7:
+        need = 7
+    elif method in l4:
+        need = 3
+    else:
+        print(paint(f"[!] 알 수 없는 메소드: {method}", C.R))
+        return
+    if len(parts) < need:
+        print(paint(f"[!] 인자가 부족합니다. (필요: {need}개, 입력: {len(parts)}개)", C.R))
+        return
+    if method in l7 and not parts[1].lower().startswith("http"):
+        parts[1] = "http://" + parts[1]
+    if method in l4 and ":" not in parts[1]:
+        parts[1] += ":80"
+    # 잘못된 숫자 인자를 그대로 넘기면 하위 프로세스에서 오류가 나므로 미리 검사
+    try:
+        if method in l7:
+            socks_t = parts[2]
+            if socks_t not in {"0", "1", "4", "5", "6"}:
+                raise ValueError("SOCKS TYPE 은 0,1,4,5,6 중 하나")
+            int(parts[3])                  # threads
+            int(parts[5])                  # rpc
+            if int(parts[6]) < 1:          # duration
+                raise ValueError("DURATION 은 1 이상이어야 합니다")
+        else:
+            int(parts[2])                  # threads
+            if int(parts[3]) < 1:          # duration
+                raise ValueError("DURATION 은 1 이상이어야 합니다")
+    except (ValueError, IndexError) as exc:
+        print(paint(f"[!] 인자 오류 : {exc}  (숫자 위치 재확인 필요)", C.R))
+        return
+    _run_attack(script, parts)
+
+
+def show_all_methods(l7, l4):
+    open_screen(METHODS_ART, "ALL ATTACK METHODS  --  공격 방법 전체 보기",
+                "LAYER-7 (WEB) + LAYER-4 (NETWORK) 전체 목록")
+    show_method_panel("LAYER-7 (WEB) METHODS", sorted(l7))
+    show_method_panel("LAYER-4 (NETWORK) METHODS", sorted(l4))
+    pour([
+        ["  TOOLS 메소드 : INFO  DNS  PING  CHECK  DSTAT  TSSRV  CFIP",
+         "  특수 명령    : TOOLS(콘솔)  HELP  STOP"],
+    ], para_gap=0.05, char_delay=0.002)
+
+
+def interactive_main(l7_methods, l4_methods, script):
+    """start.py 를 인자 없이 실행했을 때의 메인 화면 루프."""
+    init()
+    if not l7_methods:
+        l7_methods = ["GET", "POST", "OVH", "CFB", "DYN", "SLOW", "RHEX", "STOMP",
+                      "STRESS", "BYPASS", "PPS", "BOMB", "DOWNLOADER"]
+    if not l4_methods:
+        l4_methods = ["TCP", "UDP", "SYN", "ICMP", "NTP", "DNS", "MEM", "RDP"]
+
+    l7 = set(l7_methods)
+    l4 = set(l4_methods)
+
+    while True:
+        show_main_screen()
+        menu = [
+            paint("  RAIN  MAIN SCREEN", C.W, bold=True),
+            "",
+            paint("   [1] ", C.CY, bold=True) + paint("LAYER-7  웹 공격 시작  (GET / POST / OVH / CFB ...)", C.W),
+            paint("   [2] ", C.CY, bold=True) + paint("LAYER-4  네트워크 공격 시작  (TCP / UDP / SYN / NTP ...)", C.W),
+            paint("   [3] ", C.CY, bold=True) + paint("TOOLS  도구 콘솔  (INFO / DNS / PING / CHECK / DSTAT)", C.W),
+            paint("   [4] ", C.CY, bold=True) + paint("공격 방법 전체 보기 (ALL METHODS)", C.W),
+            paint("   [5] ", C.CY, bold=True) + paint("EXPERT  명령어 직접 실행", C.W),
+            paint("   [0] ", C.CY, bold=True) + paint("EXIT  종료", C.W),
+        ]
+        pour([menu], para_gap=0.0, char_delay=0.0012)
+        print("")
+
+        try:
+            choice = input(paint("  \U0001d4e1\U0001d4b6\U0001d4be\U0001d4c3> ", C.M, bold=True)).strip().lower()
+        except (EOFError, KeyboardInterrupt):
+            print("")
+            break
+
+        if choice in {"0", "exit", "quit", "q", "e", "x", "종료"}:
+            typewrite(paint("[!] SHUTTING DOWN ...", C.Y), delay=0.005)
+            break
+
+        try:
+            if choice == "1":
+                wizard_layer7(script, sorted(l7))
+            elif choice == "2":
+                wizard_layer4(script, sorted(l4))
+            elif choice == "3":
+                open_screen(TOOLS_ART, "TOOLS  도구 콘솔",
+                            "INFO / DNS / PING / CHECK / DSTAT / TSSRV / CFIP")
+                _run_attack(script, ["TOOLS"])
+            elif choice == "4":
+                show_all_methods(l7, l4)
+            elif choice == "5":
+                expert_cmd(script, l7, l4)
+            elif choice in {"help", "h", "?", "도움"}:
+                show_all_methods(l7, l4)
+            else:
+                print(paint(f"  [!] 알 수 없는 명령 : {choice}   (0~5 입력)", C.R))
+        except Exception as exc:
+            print(paint(f"  [!] 예기치 못한 오류 발생 : {exc}", C.R, bold=True))
+
+        typewrite(paint("\n  [i] ENTER 를 누르면 메인 화면으로 돌아갑니다 ...", C.DIM), delay=0.002)
+        try:
+            input("")
+        except (EOFError, KeyboardInterrupt):
+            print("")
+            break
+
+
+# ---------------------------------------------------------------------------
+# 단독 실행 : 연출 미리보기 데모
+# ---------------------------------------------------------------------------
+if __name__ == "__main__":
+    init()
+    show_main_screen()
+    print("")  # tagline 아래 여백
+    pour([
+        [paint("[DEMO] RAIN 아트 엔진 미리보기", C.W, bold=True)],
+        [paint("  이 화면은 start.py 를 인자 없이 실행하면 나오는 메인 메뉴입니다.", C.CY),
+         paint("  아래는 공격 실행 시의 '문단별 조르륵' 연출 예시입니다.", C.CY)],
+    ], para_gap=0.18, char_delay=0.004)
+    show_attack_start(
+        method="GET", target="example.com", address="93.184.216.34",
+        port=443, threads=300, duration=60, is_layer7=True, proxy_count=1024)
+    import random as _r
+    try:
+        for i in range(5):
+            render_status(i, 60, "GET", "example.com",
+                          pps=_r.randint(5000, 90000), bps=_r.randint(100000, 50000000),
+                          threads=300, elapsed=i * 12 + 1, duration=60)
+            time.sleep(0.25)
+    except KeyboardInterrupt:
+        pass
+    print("")
+    show_attack_end(total_requests=1234567, total_bytes=987654321)

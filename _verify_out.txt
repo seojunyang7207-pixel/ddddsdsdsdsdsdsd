@@ -1,0 +1,19 @@
+import ok
+color = True
+calibrated glyphs = 46
+  '★' measured=2 plain=2
+  '☾' measured=1 plain=1
+  '═' measured=1 plain=1
+  '║' measured=1 plain=1
+  '𝓡' measured=2 plain=2
+  'ℛ' measured=1 plain=1
+  '⁺' measured=1 plain=1
+  '₊' measured=1 plain=1
+  '漢' measured=None plain=2
+  '’' measured=None plain=1
+  '©' measured=1 plain=1
+label width = 36
+welcome width = 41
+discord-ish width = 12
+box H width = 10
+plain ASCII width = 11

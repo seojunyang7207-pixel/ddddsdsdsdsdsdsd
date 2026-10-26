@@ -1,0 +1,10 @@
+AllocConsole = False  handle = 2952
+buffer: <unavailable>
+astral math script R   cells/glyph = None
+astral math script u   cells/glyph = None
+BMP black star         cells/glyph = None
+BMP moon               cells/glyph = None
+box double H           cells/glyph = None
+box double V           cells/glyph = None
+CJK han                cells/glyph = None
+ascii A                cells/glyph = None

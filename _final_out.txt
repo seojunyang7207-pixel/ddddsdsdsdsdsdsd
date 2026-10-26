@@ -1,0 +1,23 @@
+calibrated glyphs = 46
+[main screen] captured lines (ANSI stripped):
+   w=  0 | 
+   w= 67 |                                                     ╔═╗ ╔═╗ ╔═╗ ╔╗╔
+   w= 67 |                                                     ╠═╝ ╠═╣  ║  ║ ║
+   w= 67 |                                                     ║ ║ ╩ ╩ ╚═╝ ╝╚╝
+   w= 85 |                                    ╔═════ ★ 𝓸𝓷𝓵𝔂 𝓯𝓸𝓻 𝓽𝓮𝓼𝓽𝓲𝓷𝓰 ★ ═════╗
+   w= 85 |                                    ║   Welcome to 𝓡𝓪𝓲𝓷𝓬2 made by 𝓢𝓮𝓸𝓳𝓾    ║
+   w= 85 |                                    ║    Type HELP for a list of All C2 Commands.    ║
+   w= 85 |                                    ╚════════════════════════════════════════════════╝
+   w=  0 | 
+   w= 84 |                                  ☾⁺₊ 𝓳𝓸𝓲𝓷 𝓭𝓲𝓼𝓬𝓸𝓻𝓭.𝓰𝓰/𝓪56𝓣𝓔𝓙6𝓳  ☾⁺₊
+   w= 96 |                         ╔══════════════════════════════════════════════════════════════════════╗
+   w= 96 |                         ║             Copyright © 2026 RAIN, All Rights Reserved!              ║
+   w= 96 |                         ╚══════════════════════════════════════════════════════════════════════╝
+   w=  0 | 
+box top-row indices = [1, 4, 10]
+blank line(s) present after box1 = False
+box1 rows=1 widths=[67]
+box2 rows=4 widths=[85]
+box3 rows=3 widths=[96]
+[prompt] _ask prompt has black-on-gradient box = True
+   sample = '\x1b[38;5;0;48;5;75mS\x1b[38;5;0;48;5;81mE\x1b[38;5;0;48;5;81mL\x1b[38;5;0;48;5;81mE\x1b[38;5;0;48;5;81mC'
